@@ -248,8 +248,9 @@ if selected == "Train Model":
             # Plot using Plotly Express
             fig = px.bar(importance_df, y='Cleaned_Feature', x='Importance', title='Feature Importance',
                         labels={'Cleaned_Feature': 'Feature Name', 'Importance': 'Importance Value'},
-                        height=800)
-            fig.update_xaxes(tickangle=-90)
+                        height=800,
+                        width=800 )
+            fig.update_xaxes(tickangle=0)
             st.plotly_chart(fig)
 
         # Predictions
