@@ -99,6 +99,14 @@ if selected == "Analysis":
                         labels={'Category': 'Age Group', 'count': 'Frequency'})
             st.plotly_chart(fig)
             st.info("Add summary analysis here!")
+
+            gender_subset = data[data['Distribution'] == "gender"]
+            gender_count = gender_subset['Category'].value_counts()
+
+            fig = px.bar(gender_subset, x='Category', title='Gender Distribution',
+                        labels={'Category': 'Gender', 'count': 'Frequency'})
+            st.plotly_chart(fig)
+            st.info("Add summary analysis here!")
         
         if selected_analysis == "Descriptive Statistics":
             fig = px.histogram(
