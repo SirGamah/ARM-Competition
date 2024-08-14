@@ -107,6 +107,11 @@ if selected == "Analysis":
                         labels={'Category': 'Gender', 'count': 'Frequency'})
             st.plotly_chart(fig)
             st.info("Add summary analysis here!")
+
+            st.write("Top 10 Countries in Europe of Surveilance Data")
+            country_count = euro_df['RegionName'].value_counts().head(10)
+            st.bar_chart(country_count)
+            st.info("Add summary analysis here!")
         
         if selected_analysis == "Descriptive Statistics":
             fig = px.histogram(
