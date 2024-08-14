@@ -3,14 +3,15 @@ import pandas as pd
 from streamlit_option_menu import option_menu # for setting up menu bar
 import matplotlib.pyplot as plt # for data analysis and visualization
 import seaborn as sns
-from datetime import date # for manipulating dates
 import plotly.express as px
 from plotly import graph_objs as go # for creating interactive visualizations
+#import geopandas as gpd
 
 from sklearn.decomposition import PCA
 from sklearn.preprocessing import StandardScaler
 from sklearn.ensemble import RandomForestClassifier, GradientBoostingClassifier
 from sklearn.linear_model import LogisticRegression
+from sklearn.ensemble import RandomForestRegressor
 from sklearn.svm import SVC
 from sklearn.neighbors import KNeighborsClassifier
 from sklearn.tree import DecisionTreeClassifier
@@ -21,6 +22,8 @@ from lightgbm import LGBMClassifier
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import classification_report
 from sklearn.metrics import confusion_matrix, ConfusionMatrixDisplay, accuracy_score
+from sklearn.preprocessing import LabelEncoder
+from prophet import Prophet
 import numpy as np
 import pickle
 from io import BytesIO
@@ -41,8 +44,8 @@ st.set_page_config(page_title = page_title, page_icon = page_icon, layout = layo
 
 selected = option_menu(
     menu_title = page_title + " " + page_icon,
-    options = ['Home', 'Analysis', 'Train Model','Make Prediction', 'About'],
-    icons = ["house-fill", "book-half", "gear", "robot", "envelope-fill"],
+    options = ['Home', 'Analysis', 'Train Model', 'Make a Forecast', 'Make Prediction', 'About'],
+    icons = ["house-fill", "book-half", "gear", "activity", "robot", "envelope-fill"],
     default_index = 0,
     orientation = "horizontal"
 )
@@ -54,6 +57,16 @@ euro_link = f'https://drive.google.com/uc?id={euro_link_id}'
 euro_df = pd.read_csv(euro_link)
 #euro_df.head()
 
+# Omadacycline Gram-Negative Data
+negative_link_id = "1QeMZWNXM-wd5jsB_vh8Yeii3Y_63UDi9"
+negative_link = f'https://drive.google.com/uc?id={negative_link_id}'
+gram_neg = pd.read_excel(negative_link)
+
+# Omadacycline Gram-Negative Data
+positive_link_id = "1xFF58EBNFcaZngjwMgJbyPXalhuqJySQ"
+positive_link = f'https://drive.google.com/uc?id={positive_link_id}'
+gram_pos = pd.read_excel(positive_link)
+
 # Home page
 if selected == "Home":
     st.subheader("Welcome to AMR Web App")
@@ -61,122 +74,145 @@ if selected == "Home":
 
 
 if selected == "Analysis":
-    analysis = ["Descriptive Statistics", "Resistance Trend Analysis", "Comparative Analysis"]
-    st.subheader("Select analysis")
-    selected_analysis = st.selectbox("Pick analysis type " + picker_icon, analysis)
-    
-    if selected_analysis == "Descriptive Statistics":
-        fig = px.histogram(
-            euro_df, 
-            x='Value', 
-            nbins=30, 
-            title='Histogram of Resistance Percentages',
-            labels={'Value': 'Resistance Percentage'}, 
-            color_discrete_sequence=['blue']
-        )
+    datasets = ["Antimicrobial Resistance in Europe Data", "Gram-Negative Bactirial Surveilance Data", 
+                "Gram-Positive Bactirial Surveilance Data"]
+    st.subheader("Select oreferred dataset")
+    selected_dataset = st.selectbox("Pick a dataset " + picker_icon, datasets)
 
-        fig.update_layout(
-            xaxis_title='Resistance Percentage',
-            yaxis_title='Frequency',
-            bargap=0.1,
-            height=600
-        )
+    if selected_dataset == "Antimicrobial Resistance in Europe Data":
 
-        st.plotly_chart(fig)
+        analysis = ["Descriptive Statistics", "Resistance Trend Analysis", "Comparative Analysis",
+                    "Demographic Analysis", "Bacteria Analysis", "Antibiotics Analysis"]
+        st.subheader("Select analysis")
+        selected_analysis = st.selectbox("Pick analysis type " + picker_icon, analysis)
 
-        st.info("We can add some summary analysis here.")
+        if selected_analysis == "Demographic Analysis":
+            data = euro_df
+            data['Distribution'] = data['Distribution'].str.split(',').str[1].str.split(' ').str[-1]
+            age_subset = data[data['Distribution'] == "age"]
+            age_count = age_subset['Category'].value_counts()
+            #st.subheader("Bar Chart for Categorical Variables")
+            #st.write("Bar Chart of Age Group")
+            #st.bar_chart(age_subset, x='Category')
 
-        st.subheader("Bar Chart for Categorical Variables")
-        st.write("Bar Chart of Bacteria Types")
-        bacteria_count = euro_df['Bacteria'].value_counts()
-        st.bar_chart(bacteria_count)
-        st.info("Add summary analysis here!")
+            fig = px.bar(age_subset, x='Category', title='Age Group Distribution',
+                        labels={'Category': 'Age Group', 'count': 'Frequency'})
+            st.plotly_chart(fig)
+            st.info("Add summary analysis here!")
+        
+        if selected_analysis == "Descriptive Statistics":
+            fig = px.histogram(
+                euro_df, 
+                x='Value', 
+                nbins=30, 
+                title='Histogram of Resistance Percentages',
+                labels={'Value': 'Resistance Percentage'}, 
+                color_discrete_sequence=['blue']
+            )
 
-        st.write("Bar Chart of Antibiotic Types")
-        antibiotic_count = euro_df['Antibiotic'].value_counts()
-        st.bar_chart(antibiotic_count)
-        st.info("Add summary analysis here!")
+            fig.update_layout(
+                xaxis_title='Resistance Percentage',
+                yaxis_title='Frequency',
+                bargap=0.1,
+                height=600
+            )
 
-        st.subheader("Pie Chart of Distribution by Category")
-        st.write("Pie Chart of Distribution by Category")
-        gender_distribution = euro_df['Category'].value_counts()
-        fig = px.pie(names=gender_distribution.index, values=gender_distribution.values)
-        st.plotly_chart(fig)
-        st.info("Add summary analysis here!")
-    
-    if selected_analysis == "Resistance Trend Analysis":
-        st.subheader("Time Series Analysis")
-        aggregated_data = euro_df.groupby('Time').agg({'Value': 'mean'}).reset_index()
-        fig1 = px.line(
-            aggregated_data,
-            x='Time', 
-            y='Value',  
-            title='Resistance Trend Over Time',
-            labels={'Time': 'Year', 'Value': 'Average Resistance'},
-            markers=True  
-        )
+            st.plotly_chart(fig)
 
-        st.plotly_chart(fig1)
-        st.info("Add summary analysis here!")
+            st.info("We can add some summary analysis here.")
 
-        st.subheader("Geographical Analysis")
-        fig2 = px.choropleth(
-            euro_df,
-            locations='RegionName',
-            locationmode='country names',
-            color='Value',
-            hover_name='RegionName',
-            color_continuous_scale='Viridis',
-            title='Antimicrobial Resistance in Europe',
-            scope='europe'
-        )
+            st.subheader("Bar Chart for Categorical Variables")
+            st.write("Bar Chart of Bacteria Types")
+            bacteria_count = euro_df['Bacteria'].value_counts()
+            st.bar_chart(bacteria_count)
+            st.info("Add summary analysis here!")
 
-        st.plotly_chart(fig2)
-        st.info("Add summary analysis here!")
+            st.write("Bar Chart of Antibiotic Types")
+            antibiotic_count = euro_df['Antibiotic'].value_counts()
+            st.bar_chart(antibiotic_count)
+            st.info("Add summary analysis here!")
 
-    if selected_analysis == "Comparative Analysis":
-        st.subheader("Antibiotic Efficacy Comparison")
-        fig1 = px.box(
-            euro_df,
-            x='Antibiotic',
-            y='Value',
-            title='Antibiotic Efficacy Comparison',
-            labels={'Antibiotic': 'Antibiotic', 'Value': 'Resistance Percentage'},
-            category_orders={'Antibiotic': sorted(euro_df['Antibiotic'].unique())}
-        )
+            st.subheader("Pie Chart of Distribution by Category")
+            st.write("Pie Chart of Distribution by Category")
+            gender_distribution = euro_df['Category'].value_counts()
+            fig = px.pie(names=gender_distribution.index, values=gender_distribution.values)
+            st.plotly_chart(fig)
+            st.info("Add summary analysis here!")
+        
+        if selected_analysis == "Resistance Trend Analysis":
+            st.subheader("Time Series Analysis")
+            aggregated_data = euro_df.groupby('Time').agg({'Value': 'mean'}).reset_index()
+            fig1 = px.line(
+                aggregated_data,
+                x='Time', 
+                y='Value',  
+                title='Resistance Trend Over Time',
+                labels={'Time': 'Year', 'Value': 'Average Resistance'},
+                markers=True  
+            )
 
-        fig1.update_layout(
-            title={'text': 'Resistance Trends Over Time', 'x': 0.5},
-            xaxis_title='Year',
-            yaxis_title='Resistance Percentage',
-            height=800,  
-            width=800   
-        )
+            st.plotly_chart(fig1)
+            st.info("Add summary analysis here!")
 
-        st.plotly_chart(fig1)
-        st.info("Add summary analysis here!")
+            st.subheader("Geographical Analysis")
+            fig2 = px.choropleth(
+                euro_df,
+                locations='RegionName',
+                locationmode='country names',
+                color='Value',
+                hover_name='RegionName',
+                color_continuous_scale=px.colors.sequential.Plasma_r,
+                title='Antimicrobial Resistance in Europe',
+                scope='europe'
+            )
 
-        st.subheader("Bacteria-Antibiotic Interaction")
-        st.write("Bacteria-Antibiotic Interaction Heatmap")
-        interaction_data = euro_df.pivot_table(index='Bacteria', columns='Antibiotic', values='Value', aggfunc='mean')
+            st.plotly_chart(fig2)
+        
+            st.info("Add summary analysis here!")
 
-        fig2 = px.imshow(
-            interaction_data,
-            color_continuous_scale='Viridis',
-            title='Bacteria-Antibiotic Interaction Heatmap',
-            labels={'color': 'Resistance Percentage'},
-            aspect='auto'
-        )
+        if selected_analysis == "Comparative Analysis":
+            st.subheader("Antibiotic Efficacy Comparison")
+            fig1 = px.box(
+                euro_df,
+                x='Antibiotic',
+                y='Value',
+                title='Antibiotic Efficacy Comparison',
+                labels={'Antibiotic': 'Antibiotic', 'Value': 'Resistance Percentage'},
+                category_orders={'Antibiotic': sorted(euro_df['Antibiotic'].unique())}
+            )
 
-        fig2.update_layout(
-            title={'text': 'Bacteria-Antibiotic Interaction Heatmap', 'x': 0.5},
-            xaxis_title='Antibiotic',
-            yaxis_title='Bacteria',
-            height=1200,  
-            width=800   
-        )
-        st.plotly_chart(fig2)
-        st.info("Add summary analysis here!")
+            fig1.update_layout(
+                title={'text': 'Resistance Trends Over Time', 'x': 0.5},
+                xaxis_title='Year',
+                yaxis_title='Resistance Percentage',
+                height=800,  
+                width=800   
+            )
+
+            st.plotly_chart(fig1)
+            st.info("Add summary analysis here!")
+
+            st.subheader("Bacteria-Antibiotic Interaction")
+            st.write("Bacteria-Antibiotic Interaction Heatmap")
+            interaction_data = euro_df.pivot_table(index='Bacteria', columns='Antibiotic', values='Value', aggfunc='mean')
+
+            fig2 = px.imshow(
+                interaction_data,
+                color_continuous_scale='Viridis',
+                title='Bacteria-Antibiotic Interaction Heatmap',
+                labels={'color': 'Resistance Percentage'},
+                aspect='auto'
+            )
+
+            fig2.update_layout(
+                title={'text': 'Bacteria-Antibiotic Interaction Heatmap', 'x': 0.5},
+                xaxis_title='Antibiotic',
+                yaxis_title='Bacteria',
+                height=1200,  
+                width=800   
+            )
+            st.plotly_chart(fig2)
+            st.info("Add summary analysis here!")
 
 if selected == "Train Model":
     # Dummy feature encoding
@@ -246,11 +282,10 @@ if selected == "Train Model":
 
             st.subheader("Feature Importance Analysis")
             # Plot using Plotly Express
-            fig = px.bar(importance_df, y='Cleaned_Feature', x='Importance', title='Feature Importance',
+            fig = px.bar(importance_df, x='Cleaned_Feature', y='Importance', title='Feature Importance',
                         labels={'Cleaned_Feature': 'Feature Name', 'Importance': 'Importance Value'},
-                        height=800,
-                        width=1000 )
-            fig.update_xaxes(tickangle=0)
+                        height=1000)
+            fig.update_xaxes(tickangle=-90)
             st.plotly_chart(fig)
 
         # Predictions
@@ -290,6 +325,75 @@ if selected == "Train Model":
 
 
     model_training_and_analysis(model_selected, X_train, y_train, X_test, y_test)
+
+if selected == "Make a Forecast":
+    data = euro_df
+    data = data.drop(['Unnamed: 0', 'Unit', 'RegionCode'], axis=1)
+    data['Distribution'] = data['Distribution'].str.split(',').str[1].str.split(' ').str[-1]
+    st.subheader("Select Bacteria and a corresponding Antibiotic")
+    bacteria_selected = st.selectbox("Pick a bacteria " + picker_icon, data['Bacteria'].unique())
+    anti_selected = st.selectbox("Pick a antibiotic " + picker_icon, data['Antibiotic'].unique())
+
+    filtered_data = data[(data['Bacteria'] == bacteria_selected) & (data['Antibiotic'] == anti_selected)]
+    filtered_data = filtered_data.drop(columns=['Bacteria', 'Antibiotic'])
+
+    if filtered_data.empty:
+        st.info(f"**{bacteria_selected}** does not apply to **{anti_selected}**")
+    else:
+        # Encode categorical variables
+        #le = LabelEncoder()
+        #filtered_data['RegionName'] = le.fit_transform(filtered_data['RegionName'])
+        #filtered_data['Category'] = le.fit_transform(filtered_data['Category'])
+        #filtered_data['Distribution'] = le.fit_transform(filtered_data['Distribution'])
+        #filtered_data['Year'] = pd.to_datetime(filtered_data['Time']).dt.year
+        
+        # Prepare features and target
+        filtered_data['ds'] = pd.to_datetime(filtered_data['Time'], format='%Y') #.dt.year
+        filtered_data['y'] = filtered_data['Value']
+
+        # Encode categorical variables (RegionName and Category)
+        filtered_data['RegionName_encoded'] = pd.factorize(filtered_data['RegionName'])[0]
+        filtered_data['Category_encoded'] = pd.factorize(filtered_data['Category'])[0]
+        filtered_data['Distribution_encoded'] = pd.factorize(filtered_data['Distribution'])[0]
+
+        # Initialize the Prophet model
+        model = Prophet()
+
+        # Add regressors
+        model.add_regressor('RegionName_encoded')
+        model.add_regressor('Category_encoded')
+        model.add_regressor('Distribution_encoded')
+
+        # Fit the model
+        model.fit(filtered_data[['ds', 'y', 'RegionName_encoded', 'Category_encoded', 'Distribution_encoded']])
+
+        # Make future dataframe for the next 5 years
+        future = model.make_future_dataframe(periods=5, freq='YE')
+
+        # Include the same values of RegionName_encoded and Category_encoded for future predictions
+        future['RegionName_encoded'] = filtered_data['RegionName_encoded'].iloc[-1]
+        future['Category_encoded'] = filtered_data['Category_encoded'].iloc[-1]
+        future['Distribution_encoded'] = filtered_data['Distribution_encoded'].iloc[-1]
+
+
+        # Predict future values
+        forecast = model.predict(future)
+
+        # Plot the results
+        fig = plt.figure(figsize=(10, 6))  # Adjust the figsize tuple as needed
+        ax = fig.add_subplot(111)
+        fig = model.plot(forecast, ax=ax)
+        ax.set_xlabel("Year")
+        ax.set_ylabel("Resistance Value")
+        ax.set_title(f"Forecast for {bacteria_selected} with {anti_selected}")
+
+
+        #fig.show()
+        st.pyplot(fig)
+
+
+
+
 
 if selected == "Make Prediction":
     st.markdown("This is where the user selects the individual features to make the predictions on")
