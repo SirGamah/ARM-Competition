@@ -58,14 +58,14 @@ euro_df = pd.read_csv(euro_link)
 #euro_df.head()
 
 # Omadacycline Gram-Negative Data
-negative_link_id = "1QeMZWNXM-wd5jsB_vh8Yeii3Y_63UDi9"
+negative_link_id = "1jHO-NFMsauUGVx9pfW5RPMvNGc6G0wAT"
 negative_link = f'https://drive.google.com/uc?id={negative_link_id}'
-gram_neg = pd.read_excel(negative_link)
+gram_neg = pd.read_csv(negative_link)
 
 # Omadacycline Gram-Negative Data
-positive_link_id = "1xFF58EBNFcaZngjwMgJbyPXalhuqJySQ"
+positive_link_id = "1NHR41hfyCN26EmQ7SrLCrhSBJnAVDQo0"
 positive_link = f'https://drive.google.com/uc?id={positive_link_id}'
-gram_pos = pd.read_excel(positive_link)
+gram_pos = pd.read_csv(positive_link)
 
 # Home page
 if selected == "Home":
