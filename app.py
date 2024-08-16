@@ -531,8 +531,6 @@ if selected == "Make a Forecast":
     if selected_dataset == "Antimicrobial Resistance in Europe Data":
 
         data = euro_df
-        data = data.drop(['Unnamed: 0', 'Unit', 'RegionCode'], axis=1)
-        data['Distribution'] = data['Distribution'].str.split(',').str[1].str.split(' ').str[-1]
         st.subheader("Select Bacteria and a corresponding Antibiotic")
         bacteria_selected = st.selectbox("Pick a bacteria " + picker_icon, data['Bacteria'].unique())
         anti_selected = st.selectbox("Pick a antibiotic " + picker_icon, data['Antibiotic'].unique())
