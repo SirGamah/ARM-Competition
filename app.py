@@ -38,7 +38,7 @@ picker_icon = "👇"
 #layout = "centered"
 
 #--------------------Page configuration------------------#
-st.set_page_config(page_title = page_title, page_icon = '/assets/resistAI_logo.png')
+st.set_page_config(page_title = page_title, page_icon = 'assets/resistAI_logo.png')
 
 #--------------------Web App Design----------------------#
 
@@ -922,7 +922,7 @@ if selected == "About":
         unsafe_allow_html=True
     )
     st.subheader("About the Competition")
-    st.image("/assets/amr_logo.png", use_column_width=True)
+    st.image("assets/amr_logo.png", use_column_width=True)
     st.markdown(
         """
     The 2024 Vivli AMR Surveillance Data Challenge, funded by GARDP, Paratek, Pfizer, and Vivli, is a groundbreaking initiative aimed at harnessing the power of the Vivli AMR Register to combat antimicrobial resistance (AMR). 
