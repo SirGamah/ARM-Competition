@@ -958,7 +958,7 @@ if selected == "About":
     )
 
     st.subheader("About the Web App")
-    st.image("/assets/resistAI_logo.png", use_column_width=True)
+    st.image("assets/resistAI_about_page.png", use_column_width=True)
     st.markdown("""
     ResistAI is a robust web application designed to support researchers, healthcare professionals, and data scientists in tackling antimicrobial resistance (AMR). 
     The app provides comprehensive tools for analyzing AMR data, training predictive models, forecasting trends, and making informed predictions. 
