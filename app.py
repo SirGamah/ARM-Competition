@@ -111,7 +111,7 @@ pgram_antibiotic_list = ['Omadacycline', 'Doxycycline', 'Tetracycline',
 
 # Home page
 if selected == "Home":
-    st.image("/assets/resistAI_banner.png", use_column_width=True)
+    st.image("assets/resistAI_banner.png", use_column_width=True)
     st.subheader("Welcome to AMR Web App")
     st.write("Some dummy texts here")
 
