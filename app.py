@@ -28,7 +28,9 @@ import numpy as np
 import pickle
 import time
 from io import BytesIO
+import zipfile36 as zipfile
 import utils
+
 
 
 #-----------Web page setting-------------------#
@@ -114,8 +116,12 @@ if selected == "Home":
     st.image("assets/resistAI_banner.png", use_column_width=True)
     st.subheader("Welcome to ResistAI")
     st.write("Some dummy texts here")
-    data = pd.read_csv("atlas_gram_pos_cleaned_pop.csv.zip")
-    st.write(data.head())
+    if zip_file.type == "application/zip":
+    with zipfile.ZipFile(zip_file, "r") as z:
+        # Assuming 'atlas_gram_pos_cleaned_pop.csv' is inside the ZIP file
+        with z.open("atlas_gram_pos_cleaned_pop.csv") as csv_file:
+            df = pd.read_csv(csv_file)
+            st.write(df)
 
 
 if selected == "Analysis":
