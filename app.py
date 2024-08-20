@@ -114,7 +114,7 @@ if selected == "Home":
     st.image("assets/resistAI_banner.png", use_column_width=True)
     st.subheader("Welcome to ResistAI")
     st.write("Some dummy texts here")
-    data = pd.read_csv("atlas_gram_pos_cleaned_pop.zip")
+    data = pd.read_csv("atlas_gram_pos_cleaned_pop.csv.zip")
     st.write(data.head())
 
 
