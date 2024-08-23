@@ -347,7 +347,6 @@ if selected == "Analysis":
             )
 
             st.plotly_chart(fig1)
-            st.info("Add summary analysis here!")
 
             st.subheader("Geographical Analysis")
             fig2 = px.choropleth(
