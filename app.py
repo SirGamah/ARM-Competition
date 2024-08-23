@@ -231,7 +231,7 @@ if selected == "Analysis":
             """)
 
         st.write("Note: Feel free to revisit this guide if you need assistance.")
-        st.info("Happy analyzing!")
+        st.info("Happy analyzing!😊📈📊")
 
 
     st.subheader("Select preferred dataset")
@@ -700,7 +700,7 @@ if selected == "Train Model":
             """)
 
         st.write("Note: Feel free to revisit this guide if you need assistance.")
-        st.info("Happy training!")
+        st.info("Happy training!😊🛠️⚙️")
 
     st.subheader("Select preferred dataset")
     selected_dataset = st.selectbox("Pick a dataset " + picker_icon, datasets)
@@ -938,7 +938,7 @@ if selected == "Make a Forecast":
             """)
 
         st.write("Note: Feel free to revisit this guide if you need assistance.")
-        st.info("Happy forecasting!")
+        st.info("Happy forecasting!😊📈")
 
 
     st.subheader("Select preferred dataset")
@@ -1123,7 +1123,7 @@ if selected == "Make Prediction":
             """)
 
         st.write("Note: Feel free to revisit this guide if you need assistance.")
-        st.info("Happy making your predictions!")
+        st.info("Happy making your predictions!🕵️‍♀️🔍🤔")
     
 
     st.subheader("Select preferred dataset")
@@ -1188,7 +1188,7 @@ if selected == "About":
         st.image(image4, use_column_width=True)
 
     st.subheader("About the Competition")
-    st.image("amr_logo.png", use_column_width=True)
+    st.image("assets/amr_logo.png", use_column_width=True)
     st.markdown(
         """
     The 2024 Vivli AMR Surveillance Data Challenge, funded by GARDP, Paratek, Pfizer, and Vivli, is a groundbreaking initiative aimed at harnessing the power of the Vivli AMR Register to combat antimicrobial resistance (AMR). 
