@@ -28,7 +28,6 @@ import numpy as np
 import pickle
 import time
 from io import BytesIO
-import zipfile36 as zipfile
 import utils
 
 
@@ -193,6 +192,8 @@ if selected == "Home":
     The platform's adaptability and scalability make it a valuable resource in both high-resource and resource-limited settings, contributing to the global fight against AMR.
         """
     )
+
+    st.info("Don't forget to scroll up, access each of the pages, and have fun using **ResistAI** 😊")
 
 
 
