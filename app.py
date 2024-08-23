@@ -34,12 +34,12 @@ import utils
 
 #-----------Web page setting-------------------#
 page_title = "ResistAI"
-page_icon = "🦠🧬"
+page_icon = "🦠🧬💊"
 picker_icon = "👇"
 #layout = "centered"
 
 #--------------------Page configuration------------------#
-st.set_page_config(page_title = page_title, page_icon = 'C:/Users/Gerald BRUNO/Documents/BioMed Project/assets/resistAI_logo.png')
+st.set_page_config(page_title = page_title, page_icon = 'assets/resistAI_logo.png')
 
 #--------------------Web App Design----------------------#
 
@@ -148,7 +148,7 @@ analysis = ["Demographic Analysis", "Bacteria (Orgamism) Analysis", "Antibiotics
 
 # Home page
 if selected == "Home":
-    st.image("C:/Users/Gerald BRUNO/Documents/BioMed Project/assets/resistAI_banner.png", use_column_width=True)
+    st.image("assets/resistAI_banner.png", use_column_width=True)
     st.subheader("Welcome to AMR Web App")
 
     #
@@ -161,7 +161,7 @@ if selected == "Home":
     )
 
     st.subheader("Methods")
-    st.image("C:/Users/Gerald BRUNO/Documents/BioMed Project/assets/pipeline.jpeg", use_column_width=True)
+    st.image("assets/pipeline.jpeg", use_column_width=True)
     st.markdown(
         """
     To achieve the overaching aim for the app and provide insightful and comprehensive usage, and through the use of domain knowledge, 
@@ -176,7 +176,7 @@ if selected == "Home":
     )
 
     st.subheader("Results")
-    st.image("C:/Users/Gerald BRUNO/Documents/BioMed Project/assets/word_cloud.jpeg", use_column_width=True)
+    st.image("assets/word_cloud.jpeg", use_column_width=True)
     st.markdown(
         """
     Through rigorous analysis and modeling, ResistAI delivers precise predictions on bacterial resistance patterns, highlighting the most influential factors driving AMR. 
@@ -248,7 +248,7 @@ if selected == "Analysis":
             data = euro_df
             # Age analysis
             age_subset = data[data['Distribution'] == "age"]
-            age_count = age_subset['Category'].value_counts() #.sort_values(ascending=True)
+            age_count = age_subset['Category'].value_counts() 
             fig = px.bar(age_count, x=age_count.index, y='count', 
                     title='Age Group Distribution',
                     labels={'x': age_count.index, 'count': 'Frequency'})
@@ -1165,10 +1165,10 @@ if selected == "Make Prediction":
 if selected == "About":
     st.subheader("About the Team Members")
     # Image list
-    image1 = "C:/Users/Gerald BRUNO/Documents/BioMed Project/assets/Anthony.jpg"
-    image2 = "C:/Users/Gerald BRUNO/Documents/BioMed Project/assets/Gamah.jpg"
-    image3 = "C:/Users/Gerald BRUNO/Documents/BioMed Project/assets/4B.jpg"
-    image4 = "C:/Users/Gerald BRUNO/Documents/BioMed Project/assets/Dr_Ken.jpg"
+    image1 = "assets/Anthony.jpg"
+    image2 = "assets/Gamah.jpg"
+    image3 = "assets/4B.jpg"
+    image4 = "assets/Dr_Ken.jpg"
 
     # Create a 2x2 grid
     col1, col2 = st.columns(2)
@@ -1188,7 +1188,7 @@ if selected == "About":
         st.image(image4, use_column_width=True)
 
     st.subheader("About the Competition")
-    st.image("C:/Users/Gerald BRUNO/Documents/BioMed Project/assets/amr_logo.png", use_column_width=True)
+    st.image("amr_logo.png", use_column_width=True)
     st.markdown(
         """
     The 2024 Vivli AMR Surveillance Data Challenge, funded by GARDP, Paratek, Pfizer, and Vivli, is a groundbreaking initiative aimed at harnessing the power of the Vivli AMR Register to combat antimicrobial resistance (AMR). 
@@ -1224,7 +1224,7 @@ if selected == "About":
     )
 
     st.subheader("About the Web App")
-    st.image("C:/Users/Gerald BRUNO/Documents/BioMed Project/assets/resistAI_about_page.png", use_column_width=True)
+    st.image("assets/resistAI_about_page.png", use_column_width=True)
     st.markdown("""
     ResistAI is a robust web application designed to support researchers, healthcare professionals, and data scientists in tackling antimicrobial resistance (AMR). 
     The app provides comprehensive tools for analyzing AMR data, training predictive models, forecasting trends, and making informed predictions. 
