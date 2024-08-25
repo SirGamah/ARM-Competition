@@ -165,7 +165,7 @@ if selected == "Home":
         """
     To achieve the overaching aim for the app and provide insightful and comprehensive usage, and through the use of domain knowledge, 
     the Pfizer's ATLAS and Paratek's KEYSTONE data provided were further grouped into Gram-Positive and Gram-Negative Bacterial data.
-    Read more about this in the document [here](doc.here)
+    Read more about this in the document [here](https://drive.google.com/file/d/1lu4Tv35V6bKF1agauzSgXXXYGSj8pQvr/view?usp=sharing)
         
     ResistAI utilizes a comprehensive suite of tools, including demographic, bacterial, and antibiotic analysis, to provide a detailed understanding of AMR trends. 
     The platform employs state-of-the-art machine learning algorithms to train predictive models, and time series analysis for forecasting future resistance trends. 
