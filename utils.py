@@ -1,14 +1,11 @@
-# Imports 
-import plotly.express as px
 import streamlit as st
 import pandas as pd
-from sklearn.preprocessing import LabelEncoder
-from prophet import Prophet
-import matplotlib.pyplot as plt
-import numpy as np
-import pickle
-import time
-from io import BytesIO
+from streamlit_option_menu import option_menu # for setting up menu bar
+import matplotlib.pyplot as plt # for data analysis and visualization
+import seaborn as sns
+import plotly.express as px
+from plotly import graph_objs as go # for creating interactive visualizations
+#import geopandas as gpd
 
 from sklearn.decomposition import PCA
 from sklearn.preprocessing import StandardScaler
@@ -22,926 +19,1194 @@ from sklearn.neural_network import MLPClassifier
 from xgboost import XGBClassifier
 from catboost import CatBoostClassifier
 from lightgbm import LGBMClassifier
-from sklearn.ensemble import GradientBoostingClassifier
 from sklearn.model_selection import train_test_split
-from sklearn.metrics import confusion_matrix, ConfusionMatrixDisplay, accuracy_score
-from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score, classification_report
+from sklearn.metrics import classification_report
+from sklearn.metrics import confusion_matrix, ConfusionMatrixDisplay, accuracy_score, precision_score, recall_score, f1_score
+from sklearn.preprocessing import LabelEncoder
+from prophet import Prophet
+import numpy as np
+import pickle
+import time
+from io import BytesIO
+import utils
 
 
-# Helper functions
+#-----------Web page setting-------------------#
+page_title = "ResistAI"
+page_icon = "🦠🧬💊"
+picker_icon = "👇"
+#layout = "centered"
 
-# ATLAS DATA ANALYSIS
-# Age Group Analysis
-def atlas_age_group(df):
-    top_10_countries = df['Age Group'].value_counts()
+#--------------------Page configuration------------------#
+st.set_page_config(page_title = page_title, page_icon = 'assets/resistAI_logo.png')
 
-    fig = px.bar(top_10_countries, x=top_10_countries.index, y='count', 
-                    title='Age Group Analysis',
-                    labels={'x': top_10_countries.index, 'count': 'Frequency'})  
+#--------------------Web App Design----------------------#
 
-    return st.plotly_chart(fig)
+selected = option_menu(
+    menu_title = page_title + " " + page_icon,
+    options = ['Home', 'Analysis', 'Train Model', 'Make a Forecast', 'Make Prediction', 'About'],
+    icons = ["house-fill", "book-half", "gear", "activity", "robot", "envelope-fill"],
+    default_index = 0,
+    orientation = "horizontal"
+)
 
-# Atlas Patient Type
-def atlas_patient_type(df):
-    pat_type = df['Patient Type'].value_counts()
+@st.cache_data
+#Antimicrobial Resistance in Europe Data
+def load_euro_data():
+    euro_link_id = "1aNulNFQQzvoDh75hbtZJ7_QcW4fRl9rs"
+    euro_link = f'https://drive.google.com/uc?id={euro_link_id}'
+    euro_df = pd.read_csv(euro_link)
+    #euro_df = pd.read_csv("ecdc.csv")
+    euro_df['Distribution'] = euro_df['Distribution'].str.split(',').str[1].str.split(' ').str[-1]
+    euro_df = euro_df.drop(columns = ['Unit', 'RegionCode', 'Unnamed: 0'], axis = 1)
+    return euro_df
 
-    fig = px.bar(pat_type, x=pat_type.index, y='count', 
-                    title='Patient Type Analysis',
-                    labels={'x': pat_type.index, 'count': 'Frequency'})  
+euro_df = load_euro_data()
 
-    return st.plotly_chart(fig)
+@st.cache_data
+# Omadacycline Gram-Negative Data
+def load_oma_ngram():
+    negative_link_id = "1jHO-NFMsauUGVx9pfW5RPMvNGc6G0wAT"
+    negative_link = f'https://drive.google.com/uc?id={negative_link_id}'
+    gram_neg = pd.read_csv(negative_link)
+    #gram_neg = pd.read_csv("omad_gram_neg_cleaned.csv")
+    gram_neg = gram_neg.rename(columns={'Piperacillin-\ntazobactam': 'Piperacillin-tazobactam'})
+    gram_neg = gram_neg.rename(columns={'Piperacillin-\ntazobactam_MIC': 'Piperacillin-tazobactam_MIC'})
+    gram_neg = gram_neg[gram_neg['Age'] < 200]
+    gram_neg['Gender'] = gram_neg['Gender'].replace({'M': 'Male', 'F': 'Female'})
 
-# Atlas Yearly Antibiotic Resistance
-def atlas_anti_resistance_yearly(df, anti):
+    return gram_neg
 
-    anti_MIC = anti + "_MIC"
-    resistance = df.groupby(['Year', anti_MIC])[anti_MIC].count().unstack().fillna(0)
-    fig = px.bar(resistance, 
-                    x=resistance.index, 
-                    y=resistance.columns, 
-                    title=f'Distribution of {anti} Resistance Over the Years',
-                    labels={'x': 'Year', 'value': 'Frequency'},
-                    color_discrete_map={'Resistant': 'red', 'Intermediate': 'orange', 'Susceptible': 'green'})
-    return st.plotly_chart(fig)
+gram_neg = load_oma_ngram()
 
-# Atlas Yearly organism distribution
-def atlas_org_by_year(df):
-    organism_distribution = df.groupby(['Year', 'Species'])['Species'].count().unstack().fillna(0)
+@st.cache_data
+# Omadacycline Gram-Negative Data
+def load_oma_pgram():
+    positive_link_id = "1NHR41hfyCN26EmQ7SrLCrhSBJnAVDQo0"
+    positive_link = f'https://drive.google.com/uc?id={positive_link_id}'
+    gram_pos = pd.read_csv(positive_link)
+    #gram_pos = pd.read_csv("omad_gram_pos_cleaned.csv")
+    gram_pos = gram_pos[gram_pos['Age'] < 200]
+    gram_pos['Gender'] = gram_pos['Gender'].replace({'M': 'Male', 'F': 'Female'})
+    return gram_pos
 
-    fig = px.bar(organism_distribution, 
-                    x=organism_distribution.index, 
-                    y=organism_distribution.columns, 
-                    title='Distribution of Organisms Over the Years',
-                    labels={'x': 'Year', 'value': 'Number of Organisms'})
-    return st.plotly_chart(fig)
+gram_pos = load_oma_pgram()
 
-# Atlas Age Group vs Organisms
-def atlas_age_vs_org(df, col):
-    fig = px.histogram(df, x="Age Group", color = col,
-                        title="Distribution of Organisms by Age Group")
-    fig.update_layout(yaxis_title="Number of Organisms")
-    return st.plotly_chart(fig)
+@st.cache_data
+# Atlas Gram-Negative Data
+def atlas_gram_neg():
+    negative_link_id = "1SK9j-0gzKr7WFN-1F0pmcKHhF_oqlt9U"
+    negative_link = f'https://drive.google.com/uc?id={negative_link_id}'
+    atlas_gram_neg = pd.read_csv(negative_link)
+    return atlas_gram_neg
 
-# Plot Organism by Family
-def atlas_org_by_family(df, col):
-    fig = px.histogram(df, x="Family", color=col, title="Distribution of Organisms by their Family")
-    fig.update_layout(yaxis_title="Number of Organisms",
-                      #height=1200,  
-                    width=800)
-    fig.update_xaxes(tickangle=-90)
-    return st.plotly_chart(fig)
+atlas_gram_neg = atlas_gram_neg()
 
-# Plot Antibiotic Resistance
-def anti_resistance(df):
-    mic_cols = [col for col in df.columns if col.endswith('MIC')]
-    data = pd.DataFrame()
+@st.cache_data
+# Atlas Gram-Positive Data
+def atlas_gram_pos():
+    positive_link_id = "1HjME4Ef0Byz4XElh284KVZODmJjt9WKS"
+    positive_link = f'https://drive.google.com/uc?id={positive_link_id}'
+    atlas_gram_pos = pd.read_csv(positive_link)
+    #atlas_gram_pos = atlas_gram_pos.drop('Phenotype', axis = 1)
+    return atlas_gram_pos
 
-    for column in mic_cols:
-        counts = df[column].value_counts().reset_index()
-        counts.columns = ['Status', 'Count']
-        counts['Antibiotic'] = column.replace('_MIC', '')
-        data = pd.concat([data, counts], axis=0)
+atlas_gram_pos = atlas_gram_pos()
 
-    fig = px.bar(data, x='Antibiotic', y='Count', color='Status', title='Antibiotic Resistance Distribution',
-                    labels={'Count': 'Frequency', 'Antibiotic': 'Antibiotic'},
-                    color_discrete_map={'Resistant': 'red', 'Intermediate': 'orange', 'Susceptible': 'green'})
 
-    return st.plotly_chart(fig)
+# List of items
+model_list = ['Random Forest', 'Logistic Regression', 'Support Vector Machine (SVM)',
+                    'Gradient Boosting Classifier', 'K-Nearest Neighbors (KNN)', 
+                    'Decision Tree Classifier', 'Extreme Gradient Boosting (XGBoost)',
+                    'Neural Network (MLPClassifier)', 'CatBoost Classifier', 'LightGBM Classifier']
 
-# Plot Organism Infection Source
-def org_infection_source(df):
-    fig = px.histogram(df, x="Infection Source", color="Organism", title="Distribution of Organisms by Source of Infection")
-    fig.update_layout(yaxis_title="Number of Organisms",
-                      #height=1200,  
-                    width=800)
-    fig.update_xaxes(tickangle=-90)
-    return st.plotly_chart(fig)
+ngram_antibiotic_list = ['Omadacycline', 'Doxycycline', 'Minocycline',
+       'Tetracycline', 'Tigecycline', 'Ceftriaxone', 'Piperacillin-tazobactam',
+       'Levofloxacin', 'Gentamicin', 'Amikacin', 'Aztreonam', 'Cefepime',
+       'Ceftazidime', 'Imipenem', 'Trimethoprim-sulfamethoxazole']
 
-# Plot Organism Specimen Type
-def org_specimen_type(df):
-    fig = px.histogram(df, x="Specimen Type", color="Organism", title="Distribution of Organisms by Type of Specimen")
-    fig.update_layout(yaxis_title="Number of Organisms",
-                      #height=1200,  
-                    width=800)
-    fig.update_xaxes(tickangle=-90)
-    return st.plotly_chart(fig)
-    
-# Plot Organism Infection Types
-def org_infection_type(df):
-    fig = px.histogram(df, x="Infection Type", color="Organism", title="Distribution of Organisms by Type of Infection")
-    fig.update_layout(yaxis_title="Number of Organisms",
-                      #height=1200,  
-                    width=800)
-    fig.update_xaxes(tickangle=-90)
-    return st.plotly_chart(fig)
+pgram_antibiotic_list = ['Omadacycline', 'Doxycycline', 'Tetracycline',
+       'Tigecycline', 'Oxacillin', 'Ceftaroline', 'Levofloxacin',
+       'Erythromycin', 'Clindamycin', 'Linezolid', 'Daptomycin', 'Vancomycin',
+       'Gentamicin', 'Trimethoprim-sulfamethoxazole']
 
-# Plot Organism Distribution by Country
-def org_by_country(df, col):
-    fig = px.histogram(df, x="Country", color=col, title="Distribution of Organisms per Country of Study")
-    fig.update_layout(yaxis_title="Number of Organisms",
-                      #height=1200,  
-                    width=800)
-    fig.update_xaxes(tickangle=-90)
-    return st.plotly_chart(fig)
-    
-# Plot Organism Resistance per Antibiotic
-def org_vs_anti(df, anti, col):
-    fig = px.histogram(df, x=anti + "_MIC", color= col, title=f"Distribution of Organisms per {anti}")
-    fig.update_layout(yaxis_title="Number of Organisms",
-                      xaxis_title=f"{anti} Resistance State")
-    return st.plotly_chart(fig)
+atlas_pgram_anti_list = ['Clindamycin', 'Erythromycin', 'Levofloxacin', 'Linezolid', 'Minocycline',
+                         'Penicillin', 'Tigecycline', 'Vancomycin','Ceftaroline', 'Daptomycin',
+                         'Oxacillin','Teicoplanin']
 
-# Plot Organism per Gender
-def org_per_gender(df, col):
-    fig = px.histogram(df, x="Gender", color=col,
-                   title="Distribution of Organisms by Gender",
-                   labels={'Gender':'Gender'})
-    fig.update_layout(yaxis_title="Number of Organisms")
-    return st.plotly_chart(fig)
+atlas_ngram_anti_list = ['Amikacin', 'Amoxycillin clavulanate', 'Ampicillin', 'Cefepime', 'Ceftazidime', 
+                         'Ceftriaxone', 'Imipenem', 'Levofloxacin', 'Meropenem', 'Minocycline', 
+                         'Piperacillin tazobactam', 'Tigecycline', 'Aztreonam', 'Ceftaroline', 
+                         'Ceftazidime avibactam', 'Colistin']
 
-# Age Grouping 
-def age_group(age):
-    if age <= 5:
-        return '0-5'
-    elif 6 <= age <= 12:
-        return '6-12'
-    elif 13 <= age <= 19:
-        return '13-19'
-    elif 20 <= age <= 40:
-        return '20-40'
-    elif 41 <= age <= 60:
-        return '41-60'
-    else:
-        return '60+'
-    
-# Plot Organism per Age Group
-def org_vs_age(df):
-    df['Age Group'] = df['Age'].apply(age_group)
+datasets = ["Antimicrobial Resistance in Europe Data", "Gram-Negative Bacterial Surveilance Data", 
+                "Gram-Positive Bacterial Surveilance Data", "Atlas Gram-Negative Bacteria Data",
+                "Atlas Gram-Positive Bacteria Data"]
 
-    fig = px.histogram(df, x="Age Group", color="Organism",
-                        title="Distribution of Organisms by Age Group")
-    fig.update_layout(yaxis_title="Number of Organisms")
-    return st.plotly_chart(fig)
-    
-# Continent Analysis
-def continent_analysis(df):
-    continents = df['Continent'].value_counts()
+analysis = ["Demographic Analysis", "Bacteria (Orgamism) Analysis", "Antibiotics Analysis"]
 
-    fig = px.bar(continents, x=continents.index, y='count', 
-                    title='Distribution of Continents of the Study',
-                    labels={'x': continents.index, 'count': 'Frequency'})  
+# Home page
+if selected == "Home":
+    st.image("assets/resistAI_banner.png", use_column_width=True)
+    st.subheader("Welcome to ResistAI")
 
-    return st.plotly_chart(fig)
-    
-# Country Analysis
-def top_10_countries(df):
-    top_10_countries = df['Country'].value_counts().head(10)
+    #
+    st.subheader("Objectives")
+    st.markdown(
+        """
+    The primary objective of ResistAI is to leverage advanced data analytics and machine learning techniques to analyze, predict, and forecast antimicrobial resistance (AMR) patterns. 
+    The platform aims to empower healthcare professionals and researchers with actionable insights to enhance antibiotic stewardship, optimize treatment strategies, and contribute to global efforts in combating AMR.
+        """
+    )
 
-    fig = px.bar(top_10_countries, x=top_10_countries.index, y='count', 
+    st.subheader("Methods")
+    st.image("assets/pipeline.jpeg", use_column_width=True)
+    st.markdown(
+        """
+    To achieve the overaching aim for the app and provide insightful and comprehensive usage, and through the use of domain knowledge, 
+    the Pfizer's ATLAS and Paratek's KEYSTONE data provided and used in the development of this web app were further grouped into Gram-Positive and Gram-Negative Bacterial data.
+    Read more about this in the document [here](https://drive.google.com/file/d/1lu4Tv35V6bKF1agauzSgXXXYGSj8pQvr/view?usp=sharing)
+        
+    ResistAI utilizes a comprehensive suite of tools, including demographic, bacterial, and antibiotic analysis, to provide a detailed understanding of AMR trends. 
+    The platform employs state-of-the-art machine learning algorithms to train predictive models, and time series analysis for forecasting future resistance trends. 
+    Data is visualized through interactive charts and maps, offering users an intuitive and in-depth exploration of AMR data.
+        """,
+        unsafe_allow_html=True
+    )
+
+    st.subheader("Results")
+    st.image("assets/word_cloud.jpeg", use_column_width=True)
+    st.markdown(
+        """
+    Through rigorous analysis and modeling, ResistAI delivers precise predictions on bacterial resistance patterns, highlighting the most influential factors driving AMR. 
+    The platform’s forecasts offer clear insights into potential future scenarios, assisting in preemptive measures against rising resistance trends. 
+    The results are presented in an easily interpretable format, allowing for quick and informed decision-making.
+        """
+    )
+    st.image("assets/atlas_results.png", use_column_width=True)
+
+    st.subheader("Impact of the Work")
+    st.markdown(
+        """
+    ResistAI's work significantly impacts public health by providing a robust tool for understanding and combating AMR. 
+    By enabling data-driven decisions, the platform supports improved patient outcomes, reduces the misuse of antibiotics, and strengthens global efforts to curtail the spread of resistant bacterial strains. 
+    The platform's adaptability and scalability make it a valuable resource in both high-resource and resource-limited settings, contributing to the global fight against AMR.
+        """
+    )
+
+    st.info("Don't forget to scroll up, access each of the pages, and have fun using **ResistAI** 😊")
+
+
+
+
+if selected == "Analysis":
+
+    # Analys page Instructions Sidebar
+    with st.sidebar:
+        st.header("Welcome to the Analysis Page!")
+        st.subheader("Instructions")
+        
+        with st.expander("**Step 1: Select Your Dataset**"):
+            st.write("""
+            - Use the first dropdown menu to choose the dataset you want to analyze.
+                - Options include:
+                    - **Antimicrobial Resistance in Europe Data**: Contains data on antimicrobial resistance trends in Europe.
+                    - **Gram-Negative Bacterial Surveillance Data**: Focuses on surveillance data related to Gram-negative bacteria from the Paratek KEYSTONE data.
+                    - **Gram-Positive Bacterial Surveillance Data**: Covers surveillance data on Gram-positive bacteria from Paratek KEYSTONE data.
+                    - **Atlas Gram-Negative Bacteria Data**: Covers data on Gram-negative bacteria from the Pfizer ATLAS data.
+                    - **Atlas Gram-Positive Bacteria Data**: Covers data on Gram-positive bacteria from the Pfizer ATLAS data.   
+            """)
+
+        with st.expander("**Step 2: Choose the Type of Analysis**"):
+            st.write("""
+            - Once you've selected your dataset, use the second dropdown menu to choose the type of analysis:
+                - **Demographic Analysis**: Analyze data based on demographic factors.
+                - **Bacterial Analysis**: Focus on analyzing bacterial strains and related metrics.
+                - **Antibiotic Analysis**: Analyze the effectiveness of different antibiotics and resistance patterns.
+            """)
+
+        with st.expander("**Step 3: Interact with Visualizations**"):
+            st.write("""
+            - After selecting your dataset and analysis type, visualizations will be generated.
+            - Interact with these visualizations by hovering over bars, choropleths, or other elements to see detailed information.
+            - This interaction will provide you with deeper insights into the data.
+            """)
+
+        st.write("Note: Feel free to revisit this guide if you need assistance.")
+        st.info("Happy analyzing!😊📈📊")
+
+
+    st.subheader("Select preferred dataset")
+    selected_dataset = st.selectbox("Pick a dataset " + picker_icon, datasets)
+
+
+    if selected_dataset == "Antimicrobial Resistance in Europe Data":
+
+        st.subheader("Select analysis")
+        selected_analysis = st.selectbox("Pick analysis type " + picker_icon, analysis)
+
+        if selected_analysis == "Demographic Analysis":
+
+            data = euro_df
+            # Age analysis
+            age_subset = data[data['Distribution'] == "age"]
+            age_count = age_subset['Category'].value_counts() 
+            fig = px.bar(age_count, x=age_count.index, y='count', 
+                    title='Age Group Distribution',
+                    labels={'x': age_count.index, 'count': 'Frequency'})
+            fig.update_layout(
+                xaxis_title='Age Group',
+                yaxis_title='Frequency',  
+            )
+            st.plotly_chart(fig)
+
+            # Gender analysis
+            gender_subset = data[data['Distribution'] == "gender"]
+            gender_count = gender_subset['Category'].value_counts().sort_values(ascending=True)
+            fig = px.bar(gender_count, x=gender_count.index, y='count', 
+                    title='Gender Distribution',
+                    labels={'x': gender_count.index, 'count': 'Frequency'})
+            fig.update_layout(
+                xaxis_title='Gender',
+                yaxis_title='Frequency',  
+            )
+            st.plotly_chart(fig)
+
+            # Country analysis
+            country_count = data['RegionName'].value_counts().sort_values(ascending=False).head(10)
+            fig = px.bar(country_count, x=country_count.index, y='count', 
                     title='Top 10 Countries of the Study',
-                    labels={'x': top_10_countries.index, 'count': 'Frequency'})  
+                    labels={'x': country_count.index, 'count': 'Frequency'})
+            fig.update_layout(
+                xaxis_title='Countries',
+                yaxis_title='Frequency',  
+            )
+            st.plotly_chart(fig)
+        
 
-    return st.plotly_chart(fig)
+        # Bacteria Analysis
+        if selected_analysis == "Bacteria (Orgamism) Analysis":
 
-# Top 10 Organisms
-def top_10_organisms(df, col):
-    top_10_organisms = df[col].value_counts().head(10)
+            bacteria_count = euro_df['Bacteria'].value_counts()
+            fig = px.bar(bacteria_count, x=bacteria_count.index, y='count', 
+                    title='Distribution of Bacteria',
+                    labels={'x': bacteria_count.index, 'count': 'Frequency'})
+            fig.update_layout(
+                xaxis_title='Bacteria',
+                yaxis_title='Frequency',  
+            )
+            st.plotly_chart(fig)
 
-    fig = px.bar(top_10_organisms, x=top_10_organisms.index, y='count', 
-                    title='Top 10 Organisms in the Study',
-                    labels={'x': top_10_organisms.index, 'count': 'Frequency'})  
-
-    return st.plotly_chart(fig)
-    
-# Yearly organism distribution
-def org_by_year(df):
-    organism_distribution = df.groupby(['Study Year', 'Organism'])['Organism'].count().unstack().fillna(0)
-
-    fig = px.bar(organism_distribution, 
-                    x=organism_distribution.index, 
-                    y=organism_distribution.columns, 
-                    title='Distribution of Organisms Over the Years',
-                    labels={'x': 'Study Year', 'value': 'Number of Organisms'})
-    return st.plotly_chart(fig)
-
-# Yearly Antibiotic Resistance
-def anti_resistance_yearly(df, anti):
-
-    anti_MIC = anti + "_MIC"
-    resistance = df.groupby(['Study Year', anti_MIC])[anti_MIC].count().unstack().fillna(0)
-    fig = px.bar(resistance, 
-                    x=resistance.index, 
-                    y=resistance.columns, 
-                    title=f'Distribution of {anti} Resistance Over the Years',
-                    labels={'x': 'Study Year', 'value': 'Frequency'},
-                    color_discrete_map={'Resistant': 'red', 'Intermediate': 'orange', 'Susceptible': 'green'})
-    return st.plotly_chart(fig)
-    
-# Plot age distribution
-def age_distribution(df):
-    fig = px.histogram(df, x="Age", title='Age Distribution')
-    fig.update_layout(yaxis_title="Frequency")
-    return st.plotly_chart(fig)
-
-# Plot Gender Distribution
-def gender_distribution(df):
-    fig = px.histogram(df, x="Gender", 
-                   title="Distribution of Gender",
-                   labels={'Gender':'Patient Gender'})
-    fig.update_layout(yaxis_title="Frequency")
-    return st.plotly_chart(fig)
-
-# Prepare data for forecasting
-def forecast_data(df, anti, bacteria, period):
-    df = df[df['Organism'] == bacteria]
-
-    cols_to_use = ['Study Year', 'Continent', 'Country', 'Nosocomial',
-               'Age', 'Gender', 'Infection Source', 'Infection Type', 'Specimen Type']
-    
-    cols_to_use.append(anti)
-    df = df[cols_to_use]
-   
-    le = LabelEncoder()
-
-    # Identify non-numerical columns in df
-    non_numerical_cols = df.select_dtypes(include=['object', 'category']).columns
-
-    # Apply label encoding to non-numerical columns
-    for col in non_numerical_cols:
-        df[col] = le.fit_transform(df[col])
-    
-    # Prepare features and target
-    df['ds'] = pd.to_datetime(df['Study Year'], format='%Y') #.dt.year
-    df['y'] = df[anti]
-
-    forecast_btn = st.button("Make Your Forecast")
+        
+        # Antibiotic Analysis
+        if selected_analysis == "Antibiotics Analysis":
             
-    if forecast_btn:
-        # Initialize the progress bar
-        loading_text = st.text("Your forecast results would display soon...")
-        progress = st.progress(0)
+            anti_count = euro_df['Antibiotic'].value_counts()
+            fig = px.bar(anti_count, x=anti_count.index, y='count', 
+                    title='Distribution of Antibiotics',
+                    labels={'x': anti_count.index, 'count': 'Frequency'})
+            fig.update_layout(
+                xaxis_title='Antibiotics',
+                yaxis_title='Frequency',
+                height=800
+            )
+            fig.update_xaxes(tickangle=-90)
+            st.plotly_chart(fig)
+
+            fig1 = px.box(
+                euro_df,
+                x='Antibiotic',
+                y='Value',
+                title='Antibiotic Efficacy Comparison',
+                labels={'Antibiotic': 'Antibiotic', 'Value': 'Resistance Percentage'},
+                category_orders={'Antibiotic': sorted(euro_df['Antibiotic'].unique())}
+            )
+
+            fig1.update_layout(
+                xaxis_title='Antibiotics',
+                yaxis_title='Resistance Percentage',
+                height=800,  
+                width=800   
+            )
+
+            st.plotly_chart(fig1)
+
+            interaction_data = euro_df.pivot_table(index='Bacteria', columns='Antibiotic', values='Value', aggfunc='mean')
+
+            fig2 = px.imshow(
+                interaction_data,
+                color_continuous_scale=px.colors.sequential.Plasma_r,
+                labels={'color': 'Resistance Percentage'},
+                aspect='auto'
+            )
+
+            fig2.update_layout(
+                title={'text': 'Bacteria-Antibiotic Interaction Heatmap', 'x': 0.0},
+                xaxis_title='Antibiotic',
+                yaxis_title='Bacteria',
+                height=1200,  
+                width=800   
+            )
+            st.plotly_chart(fig2)
+
+            st.subheader("Time Series Analysis")
+            aggregated_data = euro_df.groupby('Time').agg({'Value': 'mean'}).reset_index()
+            fig1 = px.line(
+                aggregated_data,
+                x='Time', 
+                y='Value',  
+                title='Resistance Trend Over Time',
+                labels={'Time': 'Year', 'Value': 'Average Resistance'},
+                markers=True  
+            )
+
+            st.plotly_chart(fig1)
+
+    # Gram-Negative Data Analysis
+    if selected_dataset == "Gram-Negative Bacterial Surveilance Data":
+
+        st.subheader("Select analysis")
+        selected_analysis = st.selectbox("Pick analysis type " + picker_icon, analysis)
+
+        # Demographic Analysis
+        if selected_analysis == "Demographic Analysis":
+            # Age distribution analysis
+            utils.age_distribution(gram_neg)
+
+            # Gender distribution analysis
+            utils.gender_distribution(gram_neg)
+
+            # Continent analys
+            utils.continent_analysis(gram_neg)
+
+            # Top 10 countries of study
+            utils.top_10_countries(gram_neg)
+
+        # Bactirial Analysis
+        if selected_analysis == "Bacteria (Orgamism) Analysis":
+            # Top 10 Organisms
+            utils.top_10_organisms(gram_neg, "Organism")
+
+            # Distribution of Organisms per Country
+            utils.org_by_country(gram_neg, "Organism")
+
+            #Organism per Gender
+            utils.org_per_gender(gram_neg, "Organism")
+
+            #Organism per Age Group
+            utils.org_vs_age(gram_neg)
+
+            # Yearly organism distribution
+            utils.org_by_year(gram_neg)
+
+            # Distribution of Organism per antibiotic
+            st.subheader("Select an antibiotic")
+            anti = st.selectbox("Pick an Antibioticn " + picker_icon, ngram_antibiotic_list)
+            utils.org_vs_anti(gram_neg, anti, "Organism")
+
+            # Organism Infection Source
+            utils.org_infection_source(gram_neg)
+
+            #Organism Infection Types
+            utils.org_infection_type(gram_neg)
+
+            #Organism Specimen Type
+            utils.org_specimen_type(gram_neg)
+
+        # Antibiotic Analysis
+        if selected_analysis == "Antibiotics Analysis":
+            # Antibiotic Resistance
+            utils.anti_resistance(gram_neg)
+
+            # Yearly Antibiotic Resistance
+            st.subheader("Select an antibiotic for yearly resistance")
+            anti_res = st.selectbox("Pick an Antibiotic " + picker_icon, ngram_antibiotic_list, key="yearly_antibiotic")
+            utils.anti_resistance_yearly(gram_neg, anti_res)
+
+
+    # Gram-Positive Data Analysis
+    if selected_dataset == "Gram-Positive Bacterial Surveilance Data":
+        
+        st.subheader("Select analysis")
+        selected_analysis = st.selectbox("Pick analysis type " + picker_icon, analysis)
+
+        # Demographic Analysis
+        if selected_analysis == "Demographic Analysis":
+            # Age distribution analysis
+            utils.age_distribution(gram_pos)
+
+            # Gender distribution analysis
+            utils.gender_distribution(gram_pos)
+
+            # Continent analys
+            utils.continent_analysis(gram_pos)
+
+            # Top 10 countries of study
+            utils.top_10_countries(gram_pos)
+
+        # Bactirial Analysis
+        if selected_analysis == "Bacteria (Orgamism) Analysis":
+            # Top 10 Organisms
+            utils.top_10_organisms(gram_pos, "Organism")
+
+            # Distribution of Organisms per Country
+            utils.org_by_country(gram_pos, "Organism")
+
+            #Organism per Gender
+            utils.org_per_gender(gram_pos, "Organism")
+
+            #Organism per Age Group
+            utils.org_vs_age(gram_pos)
+
+            # Yearly organism distribution
+            utils.org_by_year(gram_pos)
+
+            # Distribution of Organism per antibiotic
+            st.subheader("Select an antibiotic")
+            anti = st.selectbox("Pick an Antibioticn " + picker_icon, pgram_antibiotic_list)
+            utils.org_vs_anti(gram_pos, anti, "Organism")
+
+            # Organism Infection Source
+            utils.org_infection_source(gram_pos)
+
+            #Organism Infection Types
+            utils.org_infection_type(gram_pos)
+
+            #Organism Specimen Type
+            utils.org_specimen_type(gram_pos)
+
+        # Antibiotic Analysis
+        if selected_analysis == "Antibiotics Analysis":
+            # Antibiotic Resistance
+            utils.anti_resistance(gram_pos)
+
+            # Yearly Antibiotic Resistance
+            st.subheader("Select an antibiotic for yearly resistance")
+            anti_res = st.selectbox("Pick an Antibiotic " + picker_icon, pgram_antibiotic_list, key="yearly_antibiotic")
+            utils.anti_resistance_yearly(gram_pos, anti_res)
+
+    # Atlas Gram-Negative Data Analysis
+    if selected_dataset == "Atlas Gram-Negative Bacteria Data":
+        st.subheader("Select analysis")
+        selected_analysis = st.selectbox("Pick analysis type " + picker_icon, analysis)
+
+        # Demographic Analysis
+        if selected_analysis == "Demographic Analysis":
+
+            # Age Group Analysis
+            utils.atlas_age_group(atlas_gram_neg)
+
+            # Country Analysis
+            utils.top_10_countries(atlas_gram_neg)
+
+            #Gender Distribution
+            utils.gender_distribution(atlas_gram_neg)
+
+            # Patient Type
+            utils.atlas_patient_type(atlas_gram_neg)
+        
+        # Bactirial Analysis
+        if selected_analysis == "Bacteria (Orgamism) Analysis":
+            # Top 10 Organisms
+            utils.top_10_organisms(atlas_gram_neg, "Species")
+
+            # Age Group vs Organisms
+            utils.atlas_age_vs_org(atlas_gram_neg, "Species")
+
+            # Organism per Gender
+            utils.org_per_gender(atlas_gram_neg, "Species")
+
+            # Organism Distribution by Country
+            utils.org_by_country(atlas_gram_neg, "Species")
+
+            # Yearly organism distribution
+            utils.atlas_org_by_year(atlas_gram_neg)
+
+            # Organism by Family
+            utils.atlas_org_by_family(atlas_gram_neg, "Species")
+
+            # Organism Resistance per Antibiotic
+            st.subheader("Select an antibiotic")
+            anti = st.selectbox("Pick an Antibioticn " + picker_icon, atlas_ngram_anti_list)
+            utils.org_vs_anti(atlas_gram_neg, anti, "Species")
+
+        # Antibiotic Analysis
+        if selected_analysis == "Antibiotics Analysis":
+            # Antibiotic Resistance
+            utils.anti_resistance(atlas_gram_neg)
+
+            #Yearly Antibiotic Resistance
+            st.subheader("Select an antibiotic")
+            anti = st.selectbox("Pick an Antibioticn " + picker_icon, atlas_ngram_anti_list)
+            utils.atlas_anti_resistance_yearly(atlas_gram_neg, anti)            
+    
+    # Atlas Gram-Positive Data Analysis
+    if selected_dataset == "Atlas Gram-Positive Bacteria Data":
+        st.subheader("Select analysis")
+        selected_analysis = st.selectbox("Pick analysis type " + picker_icon, analysis)
+
+        # Demographic Analysis
+        if selected_analysis == "Demographic Analysis":
+
+            # Age Group Analysis
+            utils.atlas_age_group(atlas_gram_pos)
+
+            # Country Analysis
+            utils.top_10_countries(atlas_gram_pos)
+
+            #Gender Distribution
+            utils.gender_distribution(atlas_gram_pos)
+
+            # Patient Type
+            utils.atlas_patient_type(atlas_gram_pos)
+        
+        # Bactirial Analysis
+        if selected_analysis == "Bacteria (Orgamism) Analysis":
+            # Top 10 Organisms
+            utils.top_10_organisms(atlas_gram_pos, "Species")
+
+            # Age Group vs Organisms
+            utils.atlas_age_vs_org(atlas_gram_pos, "Species")
+
+            # Organism per Gender
+            utils.org_per_gender(atlas_gram_pos, "Species")
+
+            # Organism Distribution by Country
+            utils.org_by_country(atlas_gram_pos, "Species")
+
+            # Yearly organism distribution
+            utils.atlas_org_by_year(atlas_gram_pos)
+
+            # Organism by Family
+            utils.atlas_org_by_family(atlas_gram_pos, "Species")
+
+            # Organism Resistance per Antibiotic
+            st.subheader("Select an antibiotic")
+            anti = st.selectbox("Pick an Antibioticn " + picker_icon, atlas_pgram_anti_list)
+            utils.org_vs_anti(atlas_gram_pos, anti, "Species")
+
+        # Antibiotic Analysis
+        if selected_analysis == "Antibiotics Analysis":
+            # Antibiotic Resistance
+            utils.anti_resistance(atlas_gram_pos)
+
+            #Yearly Antibiotic Resistance
+            st.subheader("Select an antibiotic")
+            anti = st.selectbox("Pick an Antibioticn " + picker_icon, atlas_pgram_anti_list)
+            utils.atlas_anti_resistance_yearly(atlas_gram_pos, anti)
+
+
+# Train Model Page
+if selected == "Train Model":
+
+    # Train Model page Instructions Sidebar
+    with st.sidebar:
+        st.header("Welcome to the Train Model Page!")
+        st.subheader("Instructions")
+        
+        with st.expander("**Step 1: Select Dataset for Training**"):
+            st.write("""
+            - **What to Do:**
+                - Use the first select box to choose the dataset you'd like to work with. The available datasets include:
+                    - **Antimicrobial Resistance in Europe Data**
+                    - **Gram-Negative Bacterial Surveillance Data**
+                    - **Gram-Positive Bacterial Surveillance Data**
+                    - **Atlas Gram-Negative Bacteria Data**
+                    - **Atlas Gram-Positive Bacteria Data**
+                     
+            - **What to Expect:** The selected dataset will be loaded and prepared for analysis.
+            """)
+
+        with st.expander("**Step 2: Choose a Machine Learning Algorithm**"):
+            st.write("""
+            - **What to Do:** 
+                - Use the second select box to select a machine learning algorithm from the list of 10 available options. 
+                     
+            - **What to Expect:** This algorithm will be used to train a model on the selected dataset.
+
+            """)
+
+        with st.expander("**Step 3: Choose an Antibiotic**"):
+            st.write("""
+            - **What to Do:** 
+                - Use the third select box to select a particular antibiotic from the list of available antibiotics you wish to train the model for. 
+                     
+            - **What to Expect:** This antibiotic will be the target variable that will be used in the training of the model.
+
+            """)
+
+        with st.expander("**Step 4: Train Your Model**"):
+            st.write("""
+            - **What to Do:** 
+                - Click the `Train your model` button to train the algorithm you have selected on the dataset chosen. 
+                     
+            - **What to Expect:** The training of the model would be done. This might take a few seconds to some minutes, depending on the algorithm selected.
+
+            """)
+
+        with st.expander("**Step 5: View and Interpret the Outputs**"):
+            st.write("""
+            - **Outputs:**
+            - **Feature Importance (if applicable):**
+                - **What to Do:** 
+                    - Check the interactive bar chart that displays the most important features used by the model. 
+                    - Hover over the bars to see details about each feature's importance.
+                - **What to Expect:** This output will help you understand which features are most influential in the model's predictions.
+            - **Metric Results:**
+                - **What to Do:** 
+                    - Review the following key performance metrics:
+                        - **Accuracy Score:** Indicates the overall accuracy of the model.
+                        - **Precision:** Measures the accuracy of positive predictions.
+                        - **Recall:** Indicates how well the model identifies positive cases.
+                        - **F1-Score:** The harmonic mean of precision and recall, balancing both metrics.
+                - **What to Expect:** These metrics will help you evaluate the model's performance and suitability for your analysis.
+            - **Confusion Matrix:**
+                - **What to Do:** 
+                    - Analyze the interactive confusion matrix plot to compare predicted labels versus actual labels.
+                    - Hover over each cell to see the count of predictions.
+                - **What to Expect:** This will give you insight into where the model is making correct or incorrect predictions.
+            """)
+
+        with st.expander("**Step 6: Download the Trained Model**"):
+            st.write("""
+            - **What to Do:**
+                - If satisfied with the model’s performance, click the `Download Model` button to download the trained model as a pickle file.
+            - **What to Expect:** This will allow you to save the model for future use or further analysis.
+            """)
+
+        st.write("Note: Feel free to revisit this guide if you need assistance.")
+        st.info("Happy training!😊🛠️⚙️")
+
+    st.subheader("Select preferred dataset")
+    selected_dataset = st.selectbox("Pick a dataset " + picker_icon, datasets)
+
+
+    if selected_dataset == "Antimicrobial Resistance in Europe Data":
+        # Dummy feature encoding
+        data_encoded = euro_df
+        # Feature and target
+        X = data_encoded.drop('Value', axis=1)
+        y = (euro_df['Value'] > 50).astype(int)  # Binary classification: 0 for non-resistant, 1 for resistant
+
+        # Apply label encoding to non-numerical columns in X
+        le = LabelEncoder()
+        non_numerical_cols = X.select_dtypes(include=['object', 'category']).columns
+
+        for col in non_numerical_cols:
+            X[col] = le.fit_transform(X[col])
+
+        # Split data
+        X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.3, random_state=42)
+
+        # Select model to train  
+        st.subheader("Select Algorithm")
+        model_selected = st.selectbox("Pick an alogorithm to train on " + picker_icon, model_list)
+        
+        def model_training_and_analysis(model_selected, X_train, y_train, X_test, y_test):
+            # Initialize the model based on selection
+            if model_selected == "Random Forest":
+                model = RandomForestClassifier()
+            elif model_selected == "Logistic Regression":
+                model = LogisticRegression()
+            elif model_selected == "Support Vector Machine (SVM)":
+                model = SVC()
+            elif model_selected == "Gradient Boosting Classifier":
+                model = GradientBoostingClassifier()
+            elif model_selected == "K-Nearest Neighbors (KNN)":
+                model = KNeighborsClassifier()
+            elif model_selected == "Decision Tree Classifier":
+                model = DecisionTreeClassifier()
+            elif model_selected == "Extreme Gradient Boosting (XGBoost)":
+                model = XGBClassifier()
+            elif model_selected == "Neural Network (MLPClassifier)":
+                model = MLPClassifier()
+            elif model_selected == "CatBoost Classifier":
+                model = CatBoostClassifier(silent=True)
+            elif model_selected == "LightGBM Classifier":
+                model = LGBMClassifier()
+            
+            train_btn = st.button("Train your model")
+            st.info("**Note**: Some algorithms might take long to train. Just give it some minutes!")
+            
+            # Get training 
+            if train_btn:
+                # Initialize the progress bar
+                loading_text = st.text("Your model is training...")
+                progress = st.progress(0)
                 
 
-        # Artificially increment progress
-        for i in range(0, 101, 10):
-            time.sleep(0.1) 
-            progress.progress(i)
-
-        # Initialize the Prophet model
-        model = Prophet()
-
-        # Add regressors
-        model.add_regressor('Continent')
-        model.add_regressor('Country')
-        model.add_regressor('Nosocomial')
-        model.add_regressor('Age')
-        model.add_regressor('Gender')
-        model.add_regressor('Infection Source')
-        model.add_regressor('Infection Type')
-        model.add_regressor('Specimen Type')
-
-
-        # Fit the model
-        model.fit(df[['ds', 'y', 'Continent', 'Country', 'Nosocomial', 'Age', 'Gender', 
-                    'Infection Source', 'Infection Type', 'Specimen Type']])
-
-        # Make future dataframe for the next 5 years
-        future = model.make_future_dataframe(periods=period, freq='YE')
-
+                # Artificially increment progress
+                for i in range(0, 101, 10):
+                    time.sleep(0.1) 
+                    progress.progress(i)
         
-        future['Continent'] = df['Continent'].iloc[-1]
-        future['Country'] = df['Country'].iloc[-1]
-        future['Nosocomial'] = df['Nosocomial'].iloc[-1]
-        future['Age'] = df['Age'].iloc[-1]
-        future['Gender'] = df['Gender'].iloc[-1]
-        future['Infection Source'] = df['Infection Source'].iloc[-1]
-        future['Infection Type'] = df['Infection Type'].iloc[-1]
-        future['Specimen Type'] = df['Specimen Type'].iloc[-1]
+                # Train the model
+                model.fit(X_train, y_train)
 
+                # Remove the progress bar after completion
+                progress.empty()
+                loading_text.empty()
 
-        # Predict future values
-        forecast = model.predict(future)
+                # Feature importance (if applicable)
+                if hasattr(model, 'feature_importances_'):
+                    importances = model.feature_importances_
+                    indices = np.argsort(importances)[::-1]
 
-        
-
-        # Plot the results
-        fig = plt.figure(figsize=(10, 6))  
-        ax = fig.add_subplot(111)
-        fig = model.plot(forecast, ax=ax)
-        ax.set_xlabel("Year")
-        ax.set_ylabel("Resistance Value")
-        ax.set_title(f"Forecast for {bacteria} with {anti}")
-
-        st.pyplot(fig)
-
-        # Remove the progress bar after completion
-        progress.empty()
-        loading_text.empty()
-
-
-# User Trained Data
-def model_training(model_selected, df, anti):
-    # Initialize the model based on selection
-    if model_selected == "Random Forest":
-        model = RandomForestClassifier()
-    elif model_selected == "Logistic Regression":
-        model = LogisticRegression()
-    elif model_selected == "Support Vector Machine (SVM)":
-        model = SVC()
-    elif model_selected == "Gradient Boosting Classifier":
-        model = GradientBoostingClassifier()
-    elif model_selected == "K-Nearest Neighbors (KNN)":
-        model = KNeighborsClassifier()
-    elif model_selected == "Decision Tree Classifier":
-        model = DecisionTreeClassifier()
-    elif model_selected == "Extreme Gradient Boosting (XGBoost)":
-        model = XGBClassifier()
-    elif model_selected == "Neural Network (MLPClassifier)":
-        model = MLPClassifier()
-    elif model_selected == "CatBoost Classifier":
-        model = CatBoostClassifier(silent=True)
-    elif model_selected == "LightGBM Classifier":
-        model = LGBMClassifier()
-
-    cols_to_use = ['Study Year', 'Organism', 'Continent', 'Country', 'Nosocomial',
-                   'Age', 'Gender', 'Infection Source', 'Infection Type', 'Specimen Type']
-
-    anti_MIC = anti + "_MIC"
-    cols_to_use.append(anti_MIC)
-    df = df[cols_to_use]
-
-    label_mapping = {'Resistant': 2, 'Intermediate': 1, 'Susceptible': 0}
-    df[anti_MIC] = df[anti_MIC].map(label_mapping)
-
-    X = df.drop(anti_MIC, axis=1)
-    y = df[anti_MIC]
-
-    # Apply label encoding to non-numerical columns in X
-    le = LabelEncoder()
-    non_numerical_cols = X.select_dtypes(include=['object', 'category']).columns
-
-    for col in non_numerical_cols:
-        X[col] = le.fit_transform(X[col])
-
-    # Split data
-    X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.3, random_state=42)
-
-    
-    train_btn = st.button("Train your model")
-    st.info("**Note**: Some algorithms might take long to train. Just give it some minutes!")
-    
-    # Get training 
-    if train_btn:
-        # Initialize the progress bar
-        loading_text = st.text("Your model is training...")
-        progress = st.progress(0)
-        
-
-        # Artificially increment progress
-        for i in range(0, 101, 10):
-            time.sleep(0.1) 
-            progress.progress(i)
-        
-        # Train the model
-        model.fit(X_train, y_train)
-
-        # Remove the progress bar after completion
-        progress.empty()
-        loading_text.empty()
-
-        # Feature importance (if applicable)
-        if hasattr(model, 'feature_importances_'):
-            importances = model.feature_importances_
-            indices = np.argsort(importances)[::-1]
-
-            # Prepare data for Plotly Express
-            importance_df = pd.DataFrame({
+                    # Prepare data for Plotly Express
+                    importance_df = pd.DataFrame({
                         'Feature': [X_train.columns[i] for i in indices],
                         'Importance': importances[indices]
                     })
 
 
-            st.subheader("Feature Importance Analysis")
-            # Plot using Plotly Express
-            fig = px.bar(importance_df, x='Feature', y='Importance', title='Most Important Features',
+                    st.subheader("Feature Importance Analysis")
+                    # Plot using Plotly Express
+                    fig = px.bar(importance_df, x='Feature', y='Importance', title='Most Important Features',
                                 labels={'Feature': 'Feature Name', 'Importance': 'Importance Value'})
-            fig.update_xaxes(tickangle=-90)
-            st.plotly_chart(fig)
+                    fig.update_xaxes(tickangle=-90)
+                    st.plotly_chart(fig)
 
-        # Make prediction
-        y_pred = model.predict(X_test)
+                # Predictions
+                st.subheader("Prediction Score")
+                y_pred = model.predict(X_test)
+                accuracy = accuracy_score(y_test, y_pred) * 100
+                precision = precision_score(y_test, y_pred, average='weighted') * 100
+                recall = recall_score(y_test, y_pred, average='weighted') * 100
+                f1 = f1_score(y_test, y_pred, average='weighted') * 100
 
-        # Calculate metrics
-        accuracy = accuracy_score(y_test, y_pred) * 100
-        precision = precision_score(y_test, y_pred, average='weighted') * 100
-        recall = recall_score(y_test, y_pred, average='weighted') * 100
-        f1 = f1_score(y_test, y_pred, average='weighted') * 100
+                # Print metrics as percentages
+                st.write(f"Accuracy: **{accuracy:.2f}%**")
+                st.write(f"Precision: **{precision:.2f}%**")
+                st.write(f"Recall: **{recall:.2f}%**")
+                st.write(f"F1-score: **{f1:.2f}%**")
 
-        # Print metrics as percentages
-        st.subheader("Prediction Score")
-        st.write(f"Accuracy: **{accuracy:.2f}%**")
-        st.write(f"Precision: **{precision:.2f}%**")
-        st.write(f"Recall: **{recall:.2f}%**")
-        st.write(f"F1-score: **{f1:.2f}%**")
+                # Confusion Matrix Analysis
+                st.subheader("Confusion Matrix Analysis")
+                cm = confusion_matrix(y_test, y_pred)
 
-        # Confusion Matrix Analysis
-        cm = confusion_matrix(y_test, y_pred)
+                # Convert confusion matrix to DataFrame for Plotly
+                cm_df = pd.DataFrame(cm, index=['Resistant', 'Suceptible'], columns=['Resistant', 'Suceptible'])
 
-        # Mapping for labels
-        label_mapping = {2: 'Resistant', 1: 'Intermediate', 0: 'Susceptible'}
+                # Plot confusion matrix using Plotly Express
+                fig1 = px.imshow(cm_df, text_auto=True, color_continuous_scale=px.colors.sequential.Plasma_r,
+                                labels={'x': 'Predicted Label', 'y': 'Actual Label', 'color': 'Count'},
+                                title='Confusion Matrix')
+                fig1.update_xaxes(side="bottom") 
+                st.plotly_chart(fig1)
 
-        # Convert to DataFrame and map labels
-        cm_df = pd.DataFrame(cm)
-        cm_df.index = cm_df.index.map(label_mapping)
-        cm_df.columns = cm_df.columns.map(label_mapping)
+            # Provide download button to download the trained model
+            st.subheader("Download Trained Model")
+            pickle_buffer = BytesIO()
+            pickle.dump(model, pickle_buffer)
+            pickle_buffer.seek(0)
 
-        # Plot confusion matrix using Plotly Express
-        fig = px.imshow(cm_df, text_auto=True, color_continuous_scale=px.colors.sequential.Plasma_r,
-                        labels={'x': 'Predicted Label', 'y': 'Actual Label', 'color': 'Count'},
-                        title='Confusion Matrix')
-        # Update layout
-        fig.update_xaxes(side="bottom")
-        fig.update_layout(
-            xaxis_title="Predicted Label",
-            yaxis_title="Actual Label",
-            title="Confusion Matrix for Classification Model"
-        )
+            st.download_button(
+                label="Download Model",
+                data=pickle_buffer,
+                file_name=f"{model_selected.replace(' ', '_')}_model.pkl",
+                mime="application/octet-stream"
+            )
 
-        st.plotly_chart(fig)
 
-    # Provide download button to download the trained model
-    st.subheader("Download Trained Model")
-    pickle_buffer = BytesIO()
-    pickle.dump(model, pickle_buffer)
-    pickle_buffer.seek(0)
+        model_training_and_analysis(model_selected, X_train, y_train, X_test, y_test)
+    
+    # Gram-Negative Data Training
+    if selected_dataset == "Gram-Negative Bacterial Surveilance Data":        
+        st.subheader("Select Algorithm")
+        model_selected = st.selectbox("Pick an alogorithm to train on " + picker_icon, model_list)
+        
+        st.subheader("Select Antibiotic to train model for")
+        anti = st.selectbox("Pick an Antibioticn " + picker_icon, ngram_antibiotic_list)
 
-    st.download_button(
-        label="Download Model",
-        data=pickle_buffer,
-        file_name=f"{model_selected.replace(' ', '_')}_model.pkl",
-        mime="application/octet-stream"
+        utils.model_training(model_selected, gram_neg, anti)
+
+    # Gram-Positive Data Training
+    if selected_dataset == "Gram-Positive Bacterial Surveilance Data":        
+        st.subheader("Select Algorithm")
+        model_selected = st.selectbox("Pick an alogorithm to train on " + picker_icon, model_list)
+        
+        st.subheader("Select Antibiotic to train model for")
+        anti = st.selectbox("Pick an Antibioticn " + picker_icon, pgram_antibiotic_list)
+
+        utils.model_training(model_selected, gram_pos, anti)
+
+    # Atlas Gram-Negative Data Training
+    if selected_dataset == "Atlas Gram-Negative Bacteria Data":        
+        st.subheader("Select Algorithm")
+        model_selected = st.selectbox("Pick an alogorithm to train on " + picker_icon, model_list)
+        
+        st.subheader("Select Antibiotic to train model for")
+        anti = st.selectbox("Pick an Antibioticn " + picker_icon, atlas_ngram_anti_list)
+
+        #Trained Data
+        utils.atlas_model_training(model_selected, atlas_gram_neg, anti, pheno = None)
+
+    # Atlas Gram-Positive Data Training
+    if selected_dataset == "Atlas Gram-Positive Bacteria Data":        
+        st.subheader("Select Algorithm")
+        model_selected = st.selectbox("Pick an alogorithm to train on " + picker_icon, model_list)
+        
+        st.subheader("Select Antibiotic to train model for")
+        anti = st.selectbox("Pick an Antibioticn " + picker_icon, atlas_pgram_anti_list)
+
+        #Trained Data
+        utils.atlas_model_training(model_selected, atlas_gram_pos, anti, pheno = "Phenotype")
+
+
+if selected == "Make a Forecast":
+    # Forecast page Instructions Sidebar
+    with st.sidebar:
+        st.header("Welcome to the Make a Forecast Page!")
+        st.subheader("Instructions")
+        
+        with st.expander("**Step 1: Select Dataset for Analysis**"):
+            st.write("""
+            - **What to Do:** 
+            - Use the first select box to choose the dataset you'd like to analyze. The available datasets include:
+                - **Antimicrobial Resistance in Europe Data**
+                - **Gram-Negative Bacterial Surveillance Data**
+                - **Gram-Positive Bacterial Surveillance Data**
+                - **Atlas Gram-Negative Bacteria Data**
+                - **Atlas Gram-Positive Bacteria Data**
+            - **What to Expect:** The selected dataset will be loaded and prepared for forecasting.
+
+            """)
+
+        with st.expander("**Step 2: Choose a Bacteria (Organism)**"):
+            st.write("""
+            - **What to Do:** 
+                - Use the second select box to select a bacteria (organism) from the list of available options in the selected dataset.
+            - **What to Expect:** This selection will allow you to focus the analysis on a specific bacteria.
+            """)
+
+        with st.expander("**Step 3: Choose an Antibiotic**"):
+            st.write("""
+            - **What to Do:** 
+                - Use the third select box to select an antibiotic from the list of available options in the selected dataset.
+            - **What to Expect:** This selection will set the context for forecasting resistance trends.
+
+            """)
+
+        with st.expander("**Step 4: Set the Forecast Period**"):
+            st.write("""
+            - **What to Do:** 
+                - Use the slider to choose the number of years for the forecast, ranging from 1 to 10 years.
+            - **What to Expect:** The forecast will be generated for the selected time period, providing a trend analysis of resistance.
+            """)
+
+        with st.expander("**Step 5: Make Your Forecast**"):
+            st.write("""
+            - **What to Do:** 
+                - Click the `Make Your Forecast` button to forecast the resistance trend of your selected bacteria (organism) to the selected antibiotic over the given period of time. 
+                     
+            - **What to Expect:** A forecast would be made based on your selections. When done, a time series plot would be displayed. This might take a few seconds to some minutes so just give it a little time.
+            """)
+
+        with st.expander("**Step 6: Interpret the Time Series Trend Analysis**"):
+            st.write("""
+            - **Output:**
+                - A time series chart will display the resistance values over the selected forecast period.
+            - **What to Expect:** Based on the trend:
+                - **Rising Trend:** Indicates increasing resistance of the selected bacteria to the chosen antibiotic over time.
+                - **Falling Trend:** Indicates decreasing resistance (higher susceptibility) of the bacteria to the antibiotic over time.
+                - **Plateauing Trend:** Indicates that the resistance of the bacteria to the antibiotic is stable and not changing significantly over time.
+            """)
+
+        st.write("Note: Feel free to revisit this guide if you need assistance.")
+        st.info("Happy forecasting!😊📈")
+
+
+    st.subheader("Select preferred dataset")
+    selected_dataset = st.selectbox("Pick a dataset " + picker_icon, datasets)
+
+    # Forecast using Antimicrobial Resistance in Europe Data
+    if selected_dataset == "Antimicrobial Resistance in Europe Data":
+
+        data = euro_df
+        st.subheader("Select Bacteria (Organism) and a corresponding Antibiotic")
+        bacteria_selected = st.selectbox("Pick a bacteria " + picker_icon, data['Bacteria'].unique())
+        anti_selected = st.selectbox("Pick a antibiotic " + picker_icon, data['Antibiotic'].unique())
+
+        filtered_data = data[(data['Bacteria'] == bacteria_selected) & (data['Antibiotic'] == anti_selected)]
+        filtered_data = filtered_data.drop(columns=['Bacteria', 'Antibiotic'])
+
+        if filtered_data.empty:
+            st.info(f"**{bacteria_selected}** does not apply to **{anti_selected}**")
+        else:
+
+            period = st.slider("Pick number of years for forecast:", 1, 10, 1)
+            
+            # Prepare features and target
+            filtered_data['ds'] = pd.to_datetime(filtered_data['Time'], format='%Y') #.dt.year
+            filtered_data['y'] = filtered_data['Value']
+
+            # Encode categorical variables
+            filtered_data['RegionName_encoded'] = pd.factorize(filtered_data['RegionName'])[0]
+            filtered_data['Category_encoded'] = pd.factorize(filtered_data['Category'])[0]
+            filtered_data['Distribution_encoded'] = pd.factorize(filtered_data['Distribution'])[0]
+
+            forecast_btn = st.button("Make Your Forecast")
+            
+            # Get training 
+            if forecast_btn:
+                # Initialize the progress bar
+                loading_text = st.text("Your forecast results would display soon...")
+                progress = st.progress(0)
+                
+
+                # Artificially increment progress
+                for i in range(0, 101, 10):
+                    time.sleep(0.1) 
+                    progress.progress(i)
+
+                # Initialize the Prophet model
+                model = Prophet()
+
+                # Add regressors
+                model.add_regressor('RegionName_encoded')
+                model.add_regressor('Category_encoded')
+                model.add_regressor('Distribution_encoded')
+
+                # Fit the model
+                model.fit(filtered_data[['ds', 'y', 'RegionName_encoded', 'Category_encoded', 'Distribution_encoded']])
+
+                # Make future dataframe 
+                future = model.make_future_dataframe(periods=period, freq='YE')
+
+                
+                future['RegionName_encoded'] = filtered_data['RegionName_encoded'].iloc[-1]
+                future['Category_encoded'] = filtered_data['Category_encoded'].iloc[-1]
+                future['Distribution_encoded'] = filtered_data['Distribution_encoded'].iloc[-1]
+
+
+                # Predict future values
+                forecast = model.predict(future)
+
+                # Plot the results
+                fig = plt.figure(figsize=(10, 6)) 
+                ax = fig.add_subplot(111)
+                fig = model.plot(forecast, ax=ax)
+                ax.set_xlabel("Year")
+                ax.set_ylabel("Resistance Value")
+                ax.set_title(f"Forecast Resistance of {bacteria_selected} to {anti_selected}")
+
+                st.pyplot(fig)
+
+                # Remove the progress bar after completion
+                progress.empty()
+                loading_text.empty()
+
+
+    # Forecast using Gram-Negative Bactirial Surveilance Data
+    if selected_dataset == "Gram-Negative Bacterial Surveilance Data":
+        
+        st.subheader("Select Bacteria (Organism) and a corresponding Antibiotic")
+        bacteria_list = gram_neg['Organism'].unique()
+        bacteria = st.selectbox("Pick an Bacteria (Organism) " + picker_icon, bacteria_list)
+        anti = st.selectbox("Pick an Antibiotic " + picker_icon, ngram_antibiotic_list)
+
+        forecast_period = st.slider("Pick number of years for forecast:", 1, 10, 1)
+        
+
+        utils.forecast_data(gram_neg, anti, bacteria, forecast_period)
+
+    # Forecast using Gram-Positive Bactirial Surveilance Data
+    if selected_dataset == "Gram-Positive Bacterial Surveilance Data":
+        
+        st.subheader("Select Antibiotic to forecast its resistance for")
+        anti = st.selectbox("Pick an Antibiotic " + picker_icon, pgram_antibiotic_list)
+
+        bacteria_list = gram_pos['Organism'].unique()
+        st.subheader("Select corresponding bacteria (organism)")
+        bacteria = st.selectbox("Pick an Bacteria (Organism) " + picker_icon, bacteria_list)
+
+        forecast_period = st.slider("Pick number of years for forecast:", 1, 10, 1)
+        
+        utils.forecast_data(gram_pos, anti, bacteria, forecast_period)
+
+    # Forecast using Atlas Negative Bacteria Data
+    if selected_dataset == "Atlas Gram-Negative Bacteria Data":
+        
+        st.subheader("Select Antibiotic to forecast its resistance for")
+        anti = st.selectbox("Pick an Antibiotic " + picker_icon, atlas_ngram_anti_list)
+
+        bacteria_list = atlas_gram_neg['Species'].unique()
+        st.subheader("Select corresponding bacteria (organism)")
+        bacteria = st.selectbox("Pick an Bacteria (Organism) " + picker_icon, bacteria_list)
+
+        forecast_period = st.slider("Pick number of years for forecast:", 1, 10, 1)
+        
+        utils.forecast_atlas(atlas_gram_neg, anti, bacteria, forecast_period, pheno=None)
+
+    # Forecast using "Atlas Gram-Positive Bacteria Data"
+    if selected_dataset == "Atlas Gram-Positive Bacteria Data":
+        
+        st.subheader("Select Antibiotic to forecast its resistance for")
+        anti = st.selectbox("Pick an Antibiotic " + picker_icon, atlas_pgram_anti_list)
+
+        bacteria_list = atlas_gram_pos['Species'].unique()
+        st.subheader("Select corresponding bacteria (organism)")
+        bacteria = st.selectbox("Pick an Bacteria (Organism) " + picker_icon, bacteria_list)
+
+        forecast_period = st.slider("Pick number of years for forecast:", 1, 10, 1)
+        
+        utils.forecast_atlas(atlas_gram_pos, anti, bacteria, forecast_period, pheno="Phenotype")
+
+
+if selected == "Make Prediction":
+
+    # Prediction page Instructions Sidebar
+    with st.sidebar:
+        st.header("Welcome to the **Make Prediction** Page!")
+        st.subheader("Instructions")
+        
+        with st.expander("**Step 1: Select Dataset for Analysis**"):
+            st.write("""
+            - **What to Do:** 
+            - Use the first select box to choose the dataset you'd like to analyze. The available datasets include:
+                - **Gram-Negative Bacterial Surveillance Data**
+                - **Gram-Positive Bacterial Surveillance Data**
+                - **Atlas Gram-Negative Bacteria Data**
+                - **Atlas Gram-Positive Bacteria Data**
+            - **What to Expect:** The selected dataset will be loaded and prepared for your forecast.
+
+            """)
+
+        with st.expander("**Step 2: Set Parameters and Conditions**"):
+            st.write("""
+            - **What to Do:** 
+                - Use the select boxes and sliders to choose various parameters and conditions.
+            - **What to Expect:** These selections will allow you to make the prediction.
+            """)
+
+        with st.expander("**Step 3: Make Prediction**"):
+            st.write("""
+            - **What to Do:** 
+                - Click on the `Make Prediction` button to generate the prediction based on your selections.
+            - **What to Expect:** The prediction would be made based on your selections. This might take a few seconds to minutes so just give it a little time.
+
+            """)
+
+        with st.expander("**Step 4: View Results**"):
+            st.write("""
+            - **Output:**
+                - There would be a display message indicating whether the selected organism (bacteria) is:
+                    - **Resistant**
+                    - **Intermediate**
+                    - **Susceptible**
+                - to the selected antibiotic under the chosen conditions.
+            """)
+
+        st.write("Note: Feel free to revisit this guide if you need assistance.")
+        st.info("Happy making your predictions!🕵️‍♀️🔍")
+    
+
+    st.subheader("Select preferred dataset")
+    selected_dataset = st.selectbox("Pick a dataset " + picker_icon, datasets[-4:])
+
+    # Gram-Negative Prediction
+    if selected_dataset == "Gram-Negative Bacterial Surveilance Data":
+        st.subheader("Select the factors below to make the prediction")
+        anti = st.selectbox("Pick an Antibiotic " + picker_icon, ngram_antibiotic_list)
+
+        utils.make_prediction(gram_neg, anti)
+    
+    # Gram-Postivie Prediction
+    if selected_dataset == "Gram-Positive Bacterial Surveilance Data":
+        st.subheader("Select the factors below to make the prediction")
+        anti = st.selectbox("Pick an Antibiotic " + picker_icon, pgram_antibiotic_list)
+
+        utils.make_prediction(gram_pos, anti)
+
+    # Atlas Gram-Negative Prediction
+    if selected_dataset == "Atlas Gram-Negative Bacteria Data":
+        
+        st.subheader("Select the factors below to make the prediction")
+        anti = st.selectbox("Pick an Antibiotic " + picker_icon, atlas_ngram_anti_list)
+
+        # Make Prediction
+        utils.atlas_make_prediction(atlas_gram_neg, anti)
+
+    # Atlas Gram-Postive Prediction
+    if selected_dataset == "Atlas Gram-Positive Bacteria Data":
+        
+        st.subheader("Select the factors below to make the prediction")
+        anti = st.selectbox("Pick an Antibiotic " + picker_icon, atlas_pgram_anti_list)
+
+        # Make Prediction
+        utils.atlas_make_prediction(atlas_gram_pos, anti)
+
+
+if selected == "About":
+    st.subheader("About the Team Members")
+    # Image list
+    image1 = "assets/Anthony.jpg"
+    image2 = "assets/Gamah.jpg"
+    image3 = "assets/4B.jpg"
+    image4 = "assets/Dr_Ken.jpg"
+
+    # Create a 2x2 grid
+    col1, col2 = st.columns(2)
+    col3, col4 = st.columns(2)
+
+    # Place the images in the grid
+    with col1:
+        st.image(image1, use_column_width=True)
+
+    with col2:
+        st.image(image2, use_column_width=True)
+
+    with col3:
+        st.image(image3, use_column_width=True)
+
+    with col4:
+        st.image(image4, use_column_width=True)
+
+    st.subheader("About the Competition")
+    st.image("assets/amr_logo.png", use_column_width=True)
+    st.markdown(
+        """
+    The 2024 Vivli AMR Surveillance Data Challenge, funded by GARDP, Paratek, Pfizer, and Vivli, is a groundbreaking initiative aimed at harnessing the power of the Vivli AMR Register to combat antimicrobial resistance (AMR). 
+    
+    This challenge seeks to drive critical research, foster collaboration and innovation, and push the boundaries of AMR research. 
+    By leveraging the Vivli AMR Register's comprehensive datasets, participants can contribute meaningfully to reshaping our understanding and approach to AMR.
+
+    Read more about the 2024 Vivli AMR Surveillance Data Challenge [here](https://amr.vivli.org/data-challenge/data-challenge-overview/).
+        """,
+        unsafe_allow_html=True
     )
 
-# Make Prediction Function
-def make_prediction(df, anti):
-    cols_to_use = ['Study Year', 'Organism', 'Continent', 'Country', 'Nosocomial',
-                   'Age', 'Gender', 'Infection Source', 'Infection Type', 'Specimen Type']
+    st.subheader("About the Datasets")
+    st.markdown("""
+    ResistAI is powered by three comprehensive datasets: Pfizer's ATLAS Program, Paratek's KEYSTONE Program, and the EARS Dataset from Kaggle. 
+    The ATLAS Program, spanning 83 countries, tracks antibiotic susceptibility, resistance trends, and emerging mechanisms, with over 917,000 antibiotic isolates and 21,000 antifungal isolates.
+    The KEYSTONE Program, covering 27 countries, focuses on omadacycline's effectiveness against challenging pathogens, with over 90,000 isolates. 
+    The EARS Dataset, sourced from European institutions, provides a diverse view of antimicrobial resistance across the continent.
+
+    These datasets are meticulously curated, updated regularly, and integrated with advanced AI to deliver unparalleled insights into AMR. 
+    ATLAS offers genotypic data and forward-looking surveillance, while KEYSTONE provides real-world clinical scenario data. 
+    EARS Dataset offers a structured and readable format, allowing users to explore resistance trends by country, gender, or age. 
+    Together, these datasets empower ResistAI users to make data-driven decisions, predict AMR dynamics, and stay informed about the latest trends in antimicrobial resistance.
     
-    anti_MIC = anti + "_MIC"
-    cols_to_use.append(anti_MIC)
-    df = df[cols_to_use]
-
-    label_mapping = {'Resistant': 2, 'Intermediate': 1, 'Susceptible': 0}
-    df[anti_MIC] = df[anti_MIC].map(label_mapping)
-    
-    X = df.drop(anti_MIC, axis=1)
-    y = df[anti_MIC]
-
-    # Set encoders
-    organism_encoder = LabelEncoder()
-    continent_encoder = LabelEncoder()
-    country_encoder = LabelEncoder()
-    nosocomial_encoder = LabelEncoder()
-    gender_encoder = LabelEncoder()
-    infection_source_encoder = LabelEncoder()
-    infection_type_encoder = LabelEncoder()
-    specimen_encoder = LabelEncoder()
-
-    # Encode variables
-    X['Organism'] = organism_encoder.fit_transform(X['Organism'])
-    X['Continent'] = continent_encoder.fit_transform(X['Continent'])
-    X['Country'] = country_encoder.fit_transform(X['Country'])
-    X['Nosocomial'] = nosocomial_encoder.fit_transform(X['Nosocomial'])
-    X['Gender'] = gender_encoder.fit_transform(X['Gender'])
-    X['Infection Source'] = infection_source_encoder.fit_transform(X['Infection Source'])
-    X['Infection Type'] = infection_type_encoder.fit_transform(X['Infection Type'])
-    X['Specimen Type'] = specimen_encoder.fit_transform(X['Specimen Type'])
-
-    gbc = GradientBoostingClassifier()
-    gbc.fit(X, y)
-
-    # Define some terms
-    organisms = df['Organism'].unique()
-    continents = df['Continent'].unique()
-    countries = df['Country'].unique()
-    nosocomial = df['Nosocomial'].unique()
-    gender = df['Gender'].unique()
-    infection_source = df['Infection Source'].unique()
-    infection_type = df['Infection Type'].unique()
-    specimen = df['Specimen Type'].unique()
-
-    # Selections
-    year = st.slider("Pick year of study:", min_value=2010, max_value=2030, value=2010, step=1)
-    organisms_selected = st.selectbox("Select bacteria (organism) under study: ", organisms)
-    continent_selected = st.selectbox("Select continent of study: ", continents)
-    country_selected = st.selectbox("Select country of study: ", countries)
-    nosocomial_selected = st.selectbox("Select Nosocomial type: ", nosocomial)
-    age = st.slider("Pick age:", 0, 150, 1)
-    gender_selected = st.selectbox("Select gender: ", gender)
-    infection_source_selected = st.selectbox("Select the source of infection: ", infection_source)
-    infection_type_selected = st.selectbox("Select the type of infection: ", infection_type)
-    specimen_selected = st.selectbox("Select the type of Specimen: ", specimen)
-    pred_btn = st.button("Make Prediction")
-
-    # Get prediction
-    if pred_btn:
-        # Initialize the progress bar
-        loading_text = st.text("Your prediction is loading...")
-        progress = st.progress(0)
-        
-
-        # Artificially increment progress
-        for i in range(0, 101, 10):
-            time.sleep(0.1) 
-            progress.progress(i)
-
-        X_test = np.array([[
-            year,
-            organisms_selected,
-            continent_selected,
-            country_selected,
-            nosocomial_selected,
-            age,
-            gender_selected,
-            infection_source_selected,
-            infection_type_selected,
-            specimen_selected,
-        ]])
-
-        # Apply encoding
-        X_test[:,1] = organism_encoder.transform(X_test[:,1])
-        X_test[:,2] = continent_encoder.transform(X_test[:,2])
-        X_test[:,3] = country_encoder.transform(X_test[:,3])
-        X_test[:,4] = nosocomial_encoder.transform(X_test[:,4])
-        X_test[:,6] = gender_encoder.transform(X_test[:,6])
-        X_test[:,7] = infection_source_encoder.transform(X_test[:,7])
-        X_test[:,8] = infection_type_encoder.transform(X_test[:,8])
-        X_test[:,9] = specimen_encoder.transform(X_test[:,9])
-
-        X_test = X_test.astype(float)
-
-        pred = gbc.predict(X_test)
-
-        # Remove the progress bar after completion
-        progress.empty()
-        loading_text.empty()
-
-        
-        if pred[0] == 0:
-            st.write(f"The bacteria (organism) **{organisms_selected}** would be **Susceptible** to the antibiotic **{anti}** on the conditions selected")
-            st.warning("**Disclaimer:** The predictions provided by this tool are intended for study purposes only. Please consult a domain expert before making any decisions based on these predictions.")
-        elif pred[0] == 1:
-            st.write(f"The bacteria (organism) **{organisms_selected}** would have **Intermediate Resistance** to the antibiotic **{anti}** on the conditions selected")
-            st.warning("**Disclaimer:** The predictions provided by this tool are intended for study purposes only. Please consult a domain expert before making any decisions based on these predictions.")
-        elif pred[0] == 2:
-            st.write(f"The bacteria (organism) **{organisms_selected}** would be **Resistant** to the antibiotic **{anti}** on the conditions selected")
-            st.warning("**Disclaimer:** The predictions provided by this tool are intended for study purposes only. Please consult a domain expert before making any decisions based on these predictions.")
-
-
-
-# Forecast Atlas
-def forecast_atlas(df, anti, bacteria, period, pheno=None):
-    # Filter the DataFrame by the selected bacteria species
-    df = df[df['Species'] == bacteria]
-    
-    # Define the common columns to use
-    base_cols = ['Study', 'Family', 'Country', 'Gender', 'Age Group', 'Speciality', 'Source', 'Patient Type', 'Year']
-    
-    # If pheno is provided, add the 'Phenotype' column
-    if pheno:
-        base_cols.append('Phenotype')
-    
-    # Add the antibiotic column to the list
-    cols_to_use = base_cols + [anti]
-    
-    # Filter the DataFrame to use only the selected columns
-    df = df[cols_to_use]
-    
-    # Initialize LabelEncoder
-    le = LabelEncoder()
-    
-    # Identify and encode non-numerical columns
-    non_numerical_cols = df.select_dtypes(include=['object', 'category']).columns
-    df[non_numerical_cols] = df[non_numerical_cols].apply(le.fit_transform)
-    
-    # Prepare features and target for Prophet
-    df['ds'] = pd.to_datetime(df['Year'], format='%Y')
-    df['y'] = df[anti]
-    
-    # Check if the DataFrame has enough data points
-    if len(df) < 10:
-        st.info(f"There is no much study on {bacteria} with {anti}")
-    else:
-        # Display the forecast button
-        forecast_btn = st.button("Make Your Forecast")
-        
-        if forecast_btn:
-            # Initialize the progress bar
-            loading_text = st.text("Your forecast results would display soon...")
-            progress = st.progress(0)
-            
-            # Artificially increment progress
-            for i in range(0, 101, 10):
-                time.sleep(0.1)
-                progress.progress(i)
-            
-            # Initialize and configure the Prophet model
-            model = Prophet()
-            for col in base_cols:
-                if col != 'Year':  # Skip 'Year' as it's used for 'ds'
-                    model.add_regressor(col)
-            
-            # Fit the model
-            model.fit(df[['ds', 'y'] + base_cols])
-            
-            # Make future dataframe for the next 'period' years
-            future = model.make_future_dataframe(periods=period, freq='YE')
-            
-            # Assign the last available value of each regressor to the future dataframe
-            for col in base_cols:
-                future[col] = df[col].iloc[-1]
-            
-            # Predict future values
-            forecast = model.predict(future)
-            
-            # Plot the forecast results
-            fig = plt.figure(figsize=(10, 6))
-            ax = fig.add_subplot(111)
-            fig = model.plot(forecast, ax=ax)
-            ax.set_xlabel("Year")
-            ax.set_ylabel("Resistance Value")
-            ax.set_title(f"Forecast for {bacteria} with {anti}")
-            st.pyplot(fig)
-            
-            # Remove the progress bar after completion
-            progress.empty()
-            loading_text.empty()
-
-
-
-# Atlas User Trained Data
-def atlas_model_training(model_selected, df, anti, pheno = None):
-    # Initialize the model based on selection
-    if model_selected == "Random Forest":
-        model = RandomForestClassifier()
-    elif model_selected == "Logistic Regression":
-        model = LogisticRegression()
-    elif model_selected == "Support Vector Machine (SVM)":
-        model = SVC()
-    elif model_selected == "Gradient Boosting Classifier":
-        model = GradientBoostingClassifier()
-    elif model_selected == "K-Nearest Neighbors (KNN)":
-        model = KNeighborsClassifier()
-    elif model_selected == "Decision Tree Classifier":
-        model = DecisionTreeClassifier()
-    elif model_selected == "Extreme Gradient Boosting (XGBoost)":
-        model = XGBClassifier()
-    elif model_selected == "Neural Network (MLPClassifier)":
-        model = MLPClassifier()
-    elif model_selected == "CatBoost Classifier":
-        model = CatBoostClassifier(silent=True)
-    elif model_selected == "LightGBM Classifier":
-        model = LGBMClassifier()
-
-    # Define the common columns to use
-    base_cols = ['Study', 'Species', 'Family', 'Country', 'Gender', 'Age Group', 'Speciality', 'Source', 'Patient Type', 'Year']
-    
-    # If pheno is provided, add the 'Phenotype' column
-    if pheno:
-        base_cols.append('Phenotype')
-    
-    # Add the antibiotic column to the list
-    anti_MIC = anti + "_MIC"
-    #base_cols.append(anti_MIC)
-    cols_to_use = base_cols + [anti_MIC]
-    
-    # Filter the DataFrame to use only the selected columns
-    df = df[cols_to_use]
-
-    # Map Antibiotic MIC column
-    label_mapping = {'Resistant': 2, 'Intermediate': 1, 'Susceptible': 0}
-    df[anti_MIC] = df[anti_MIC].map(label_mapping)
-
-    X = df.drop(anti_MIC, axis=1)
-    y = df[anti_MIC]
-
-    # Apply label encoding to non-numerical columns in X
-    le = LabelEncoder()
-    non_numerical_cols = X.select_dtypes(include=['object', 'category']).columns
-
-    for col in non_numerical_cols:
-        X[col] = le.fit_transform(X[col])
-
-    # Split data
-    X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.3, random_state=42)
-
-    
-    train_btn = st.button("Train your model")
-    st.info("**Note**: Some algorithms might take long to train. Just give it some minutes!")
-    
-    # Get training 
-    if train_btn:
-        # Initialize the progress bar
-        loading_text = st.text("Your model is training...")
-        progress = st.progress(0)
-        
-
-        # Artificially increment progress
-        for i in range(0, 101, 10):
-            time.sleep(0.1) 
-            progress.progress(i)
-        
-        # Train the model
-        model.fit(X_train, y_train)
-
-        # Remove the progress bar after completion
-        progress.empty()
-        loading_text.empty()
-
-        # Feature importance (if applicable)
-        if hasattr(model, 'feature_importances_'):
-            importances = model.feature_importances_
-            indices = np.argsort(importances)[::-1]
-
-            # Prepare data for Plotly Express
-            importance_df = pd.DataFrame({
-                        'Feature': [X_train.columns[i] for i in indices],
-                        'Importance': importances[indices]
-                    })
-
-
-            st.subheader("Feature Importance Analysis")
-            # Plot using Plotly Express
-            fig = px.bar(importance_df, x='Feature', y='Importance', title='Most Important Features',
-                                labels={'Feature': 'Feature Name', 'Importance': 'Importance Value'})
-            fig.update_xaxes(tickangle=-90)
-            st.plotly_chart(fig)
-
-        # Make prediction
-        y_pred = model.predict(X_test)
-
-        # Calculate metrics
-        accuracy = accuracy_score(y_test, y_pred) * 100
-        precision = precision_score(y_test, y_pred, average='weighted') * 100
-        recall = recall_score(y_test, y_pred, average='weighted') * 100
-        f1 = f1_score(y_test, y_pred, average='weighted') * 100
-
-        # Print metrics as percentages
-        st.subheader("Prediction Score")
-        st.write(f"Accuracy: **{accuracy:.2f}%**")
-        st.write(f"Precision: **{precision:.2f}%**")
-        st.write(f"Recall: **{recall:.2f}%**")
-        st.write(f"F1-score: **{f1:.2f}%**")
-
-        # Confusion Matrix Analysis
-        cm = confusion_matrix(y_test, y_pred)
-
-        # Mapping for labels
-        label_mapping = {2: 'Resistant', 1: 'Intermediate', 0: 'Susceptible'}
-
-        # Convert to DataFrame and map labels
-        cm_df = pd.DataFrame(cm)
-        cm_df.index = cm_df.index.map(label_mapping)
-        cm_df.columns = cm_df.columns.map(label_mapping)
-
-        # Plot confusion matrix using Plotly Express
-        fig = px.imshow(cm_df, text_auto=True, color_continuous_scale=px.colors.sequential.Plasma_r,
-                        labels={'x': 'Predicted Label', 'y': 'Actual Label', 'color': 'Count'},
-                        title='Confusion Matrix')
-        # Update layout
-        fig.update_xaxes(side="bottom")
-        fig.update_layout(
-            xaxis_title="Predicted Label",
-            yaxis_title="Actual Label",
-            title="Confusion Matrix for Classification Model"
-        )
-
-        st.plotly_chart(fig)
-
-    # Provide download button to download the trained model
-    st.subheader("Download Trained Model")
-    pickle_buffer = BytesIO()
-    pickle.dump(model, pickle_buffer)
-    pickle_buffer.seek(0)
-
-    st.download_button(
-        label="Download Model",
-        data=pickle_buffer,
-        file_name=f"{model_selected.replace(' ', '_')}_model.pkl",
-        mime="application/octet-stream"
+    """)
+    st.markdown(
+        """
+        1. Read more about the Pfizer's ATLAS Program dataset [here](https://amr.vivli.org/members/research-programs/).
+        2. Read more about the Paratek's KEYSTONE Program dataset [here](https://amr.vivli.org/members/research-programs/).
+        3. Read more about the EARS Dataset from Kaggle [here](https://www.kaggle.com/datasets/samfenske/euro-resistance).
+        """,
+        unsafe_allow_html=True
     )
 
-
-# Atlas - Make Prediction Function
-def atlas_make_prediction(df, anti):
-    # Define the common columns to use
-    base_cols = ['Study', 'Species', 'Family', 'Country', 'Gender', 'Age Group', 'Speciality', 'Source', 'Patient Type', 'Year']
-        
-    # Add the antibiotic column to the list
-    anti_MIC = anti + "_MIC"
-    cols_to_use = base_cols + [anti_MIC]
+    st.subheader("About the Web App")
+    st.image("assets/resistAI_about_page.png", use_column_width=True)
+    st.markdown("""
+    ResistAI is a robust web application designed to support researchers, healthcare professionals, and data scientists in tackling antimicrobial resistance (AMR). 
+    The app provides comprehensive tools for analyzing AMR data, training predictive models, forecasting trends, and making informed predictions. 
+    The app's user-friendly interface offers interactive visualizations that reveal deeper insights, making data exploration intuitive and informative.
     
-    # Filter the DataFrame to use only the selected columns
-    df = df[cols_to_use]
-
-    label_mapping = {'Resistant': 2, 'Intermediate': 1, 'Susceptible': 0}
-    df[anti_MIC] = df[anti_MIC].map(label_mapping)
-    
-    X = df.drop(anti_MIC, axis=1)
-    y = df[anti_MIC]
-
-    # Set encoders
-    study_encoder = LabelEncoder()
-    species_encoder = LabelEncoder()
-    family_encoder = LabelEncoder()
-    country_encoder = LabelEncoder()
-    gender_encoder = LabelEncoder()
-    age_group_encoder = LabelEncoder()
-    speciality_encoder = LabelEncoder()
-    source_encoder = LabelEncoder()
-    patient_type_encoder = LabelEncoder()
-
-    # Encode variables
-    X['Study'] = study_encoder.fit_transform(X['Study'])
-    X['Species'] = species_encoder.fit_transform(X['Species'])
-    X['Family'] = family_encoder.fit_transform(X['Family'])
-    X['Country'] = country_encoder.fit_transform(X['Country'])
-    X['Gender'] = gender_encoder.fit_transform(X['Gender'])
-    X['Age Group'] = age_group_encoder.fit_transform(X['Age Group'])
-    X['Speciality'] = speciality_encoder.fit_transform(X['Speciality'])
-    X['Source'] = source_encoder.fit_transform(X['Source'])
-    X['Patient Type'] = patient_type_encoder.fit_transform(X['Patient Type'])
-
-    gbc = GradientBoostingClassifier()
-    gbc.fit(X, y)
-
-
-    # Selections
-    year = st.slider("Pick year of study:", min_value=2000, max_value=2030, value=2010, step=1)
-    study_selected =  st.selectbox("Select the type of Study done: ", df['Study'].unique())
-    species_selected = st.selectbox("Select bacteria (organism) under study: ", df['Species'].unique())
-    family_selected = st.selectbox("Select the family that bacteria (organism) under study belong to: ", df['Family'].unique())
-    country_selected = st.selectbox("Select country of study: ", df['Country'].unique())
-    gender_selected = st.selectbox("Select gender: ", df['Gender'].unique())
-    age_group_selected = st.selectbox("Select the age group: ", df['Age Group'].unique())
-    speciality_selected = st.selectbox("Select the kind of Specialty: ", df['Speciality'].unique())
-    source_selected = st.selectbox("Select Source: ", df['Source'].unique())
-    patient_type_selected = st.selectbox("Select the patient type: ", df['Patient Type'].unique())
-    pred_btn = st.button("Make Prediction")
-
-    # Get prediction
-    if pred_btn:
-        # Initialize the progress bar
-        loading_text = st.text("Your prediction is loading...")
-        progress = st.progress(0)
-        
-
-        # Artificially increment progress
-        for i in range(0, 101, 10):
-            time.sleep(0.1) 
-            progress.progress(i)
-
-
-
-        X_test = np.array([[
-            study_selected,
-            species_selected,
-            family_selected,
-            country_selected,
-            gender_selected,
-            age_group_selected,
-            speciality_selected,
-            source_selected,
-            patient_type_selected,
-            year
-        ]])
-
-        # Apply encoding
-        X_test[:,0] = study_encoder.transform(X_test[:,0])
-        X_test[:,1] = species_encoder.transform(X_test[:,1])
-        X_test[:,2] = family_encoder.transform(X_test[:,2])
-        X_test[:,3] = country_encoder.transform(X_test[:,3])
-        X_test[:,4] = gender_encoder.transform(X_test[:,4])
-        X_test[:,5] = age_group_encoder.transform(X_test[:,5])
-        X_test[:,6] = speciality_encoder.transform(X_test[:,6])
-        X_test[:,7] = source_encoder.transform(X_test[:,7])
-        X_test[:,8] = patient_type_encoder.transform(X_test[:,8])
-
-        X_test = X_test.astype(float)
-
-        pred = gbc.predict(X_test)
-
-        # Remove the progress bar after completion
-        progress.empty()
-        loading_text.empty()
-
-        
-        if pred[0] == 0:
-            st.write(f"The bacteria (organism) **{species_selected}** would be **Susceptible** to the antibiotic **{anti}** on the conditions selected")
-            st.warning("**Disclaimer:** The predictions provided by this tool are intended for study purposes only. Please consult a domain expert before making any decisions based on these predictions.")
-        elif pred[0] == 1:
-            st.write(f"The bacteria (organism) **{species_selected}** would have **Intermediate Resistance** to the antibiotic **{anti}** on the conditions selected")
-            st.warning("**Disclaimer:** The predictions provided by this tool are intended for study purposes only. Please consult a domain expert before making any decisions based on these predictions.")
-        elif pred[0] == 2:
-            st.write(f"The bacteria (organism) **{species_selected}** would be **Resistant** to the antibiotic **{anti}** on the conditions selected")
-            st.warning("**Disclaimer:** The predictions provided by this tool are intended for study purposes only. Please consult a domain expert before making any decisions based on these predictions.")
+    ResistAI's machine learning capabilities enable users to train models with various algorithms, assess performance through metrics like accuracy, precision, recall, and F1-score, and download trained models for further use. 
+    The forecasting feature allows users to predict AMR trends over time, helping to anticipate and mitigate future resistance challenges. 
+    While ResistAI provides powerful predictive insights, it is important to note that these predictions should be used for study purposes only and not for clinical decision-making without consulting a domain expert. 
+    ResistAI is a valuable tool in the global effort to understand and combat AMR, providing data-driven insights that can inform research, policy, and practice.
+""")
