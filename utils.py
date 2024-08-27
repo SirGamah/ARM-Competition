@@ -586,6 +586,19 @@ def make_prediction(df, anti):
         progress.empty()
         loading_text.empty()
 
+        # Calculate metrics
+        accuracy = accuracy_score(y, pred) * 100
+        precision = precision_score(y, pred, average='weighted') * 100
+        recall = recall_score(y, pred, average='weighted') * 100
+        f1 = f1_score(y, pred, average='weighted') * 100
+
+        # Print metrics as percentages
+        st.subheader("Prediction Score")
+        st.write(f"Accuracy: **{accuracy:.2f}%**")
+        st.write(f"Precision: **{precision:.2f}%**")
+        st.write(f"Recall: **{recall:.2f}%**")
+        st.write(f"F1-score: **{f1:.2f}%**")
+
         
         if pred[0] == 0:
             st.write(f"The bacteria (organism) **{organisms_selected}** would be **Susceptible** to the antibiotic **{anti}** on the conditions selected")
@@ -934,6 +947,19 @@ def atlas_make_prediction(df, anti):
         # Remove the progress bar after completion
         progress.empty()
         loading_text.empty()
+
+        # Calculate metrics
+        accuracy = accuracy_score(y, pred) * 100
+        precision = precision_score(y, pred, average='weighted') * 100
+        recall = recall_score(y, pred, average='weighted') * 100
+        f1 = f1_score(y, pred, average='weighted') * 100
+
+        # Print metrics as percentages
+        st.subheader("Prediction Score")
+        st.write(f"Accuracy: **{accuracy:.2f}%**")
+        st.write(f"Precision: **{precision:.2f}%**")
+        st.write(f"Recall: **{recall:.2f}%**")
+        st.write(f"F1-score: **{f1:.2f}%**")
 
         
         if pred[0] == 0:
